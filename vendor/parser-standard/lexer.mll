@@ -543,6 +543,21 @@ rule token = parse
       { token lexbuf }
   | "_"
       { UNDERSCORE }
+  | "<<"
+      { LESSLESS }
+  | ">>"
+      { GREATERGREATER }
+  | "$("
+      { DOLLARLPAREN }
+  | "$" (lowercase identchar * as s)
+      { 
+        match s with
+        | "let" -> DOLLARLET
+        | "val" -> DOLLARVAL
+        | "gen" -> DOLLARGEN
+        | _ -> DOLLARLIDENT s }
+  | "$" (uppercase identchar * as s)
+      { DOLLARUIDENT s }
   | "~"
       { TILDE }
   | ".~"

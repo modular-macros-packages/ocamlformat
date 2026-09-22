@@ -1,0 +1,58 @@
+(* MacoCaml static ([$let]) and macro ([$gen]) bindings.  They are
+   structure items only -- there is no local [$let ... in] -- and they lay
+   out exactly like [let]. *)
+
+$let width = 8
+$let name = "generated"
+$gen const : int -> int expr = fun n -> Expr.int n
+
+(* [rec] and [and], on both keywords. *)
+
+$let rec fact n = if n <= 1 then 1 else n * fact (n - 1)
+and triangular n = if n <= 0 then 0 else n + triangular (n - 1)
+
+$gen rec unroll n =
+  if n = 0
+  then << () >>
+  else
+    <<
+      print_int $(const n);
+      $(unroll (n - 1))
+    >>
+
+and unroll_twice n =
+  <<
+    $(unroll n);
+    $(unroll n)
+  >>
+;;
+
+(* Patterns, type constraints and parameters. *)
+
+$let a, b = 1, 2
+$let (module M : S) = (module Impl : S)
+$let typed : int list = List.init width (fun i -> i)
+$gen apply f (x : int expr) : int expr = << $(f x) >>
+$gen poly : 'a. 'a expr -> 'a expr = fun x -> x
+
+(* Extensions and attributes sit where [let]'s do. *)
+
+$let%ext[@attr] tagged = ()
+$gen%ext[@attr] gen_tagged () = << () >> [@@doc "a macro binding"]
+$let[@attr1] [@attr2] many_attrs = 0
+
+(* A long binding breaks like a [let] one. *)
+
+$let a_rather_long_static_binding_name =
+  List.init width (fun i -> i * i)
+  |> List.fold_left ( + ) 0
+  |> fun total -> total * triangular width
+;;
+
+$gen a_rather_long_macro_binding_name environment expression =
+  << $(lookup environment) + $(compile expression) + $(const width) >>
+;;
+
+(* Uses. *)
+
+let () = Printf.printf "%s %d\n" $(Expr.string name) $(const width)

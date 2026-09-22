@@ -1,0 +1,126 @@
+(* MacoCaml template functors: parameters, applications and functor types
+   are spelt with square brackets, and a template functor type carries no
+   arrow between the parameter and the result. *)
+
+module type S = sig
+  type t
+
+  val v : t
+end
+
+(* Definitions. *)
+
+module F [X : S] = struct
+  type t = X.t
+
+  let v = X.v
+end
+
+module Unit_param [] = struct
+  let v = 0
+end
+
+module Anonymous [_ : S] = struct
+  let v = 0
+end
+
+module Template_first [X : S] (Y : S) = struct
+  type t = X.t * Y.t
+end
+
+module Plain_first (X : S) [Y : S] = struct
+  type t = X.t * Y.t
+end
+
+module Mixed [X : S] (Y : S) [] () = struct
+  type t = X.t * Y.t
+end
+
+module Literal =
+functor
+  [X : S]
+  ->
+  struct
+    let v = X.v
+  end
+
+module Ascribed : [X : S] S =
+functor
+  [X : S]
+  ->
+  struct
+    type t = X.t
+
+    let v = X.v
+  end
+
+(* A parameter list long enough to break. *)
+
+module A_template_functor_with_many_parameters
+    [Alpha : S]
+    [Beta : S]
+    [Gamma : S]
+    [Delta : S]
+    [Epsilon : S] =
+struct
+  let v = 0
+end
+
+(* Applications: square brackets already delimit the argument. *)
+
+module A = F [B]
+module A_unit = Unit_param []
+module A_constrained = F [(B : S)]
+
+module A_struct = F [struct
+  type t = int
+
+  let v = 0
+end]
+
+module A_nested = F [F [B]]
+module A_curried = Mixed [B] (C) [] ()
+module A_path = Lib.F [B]
+include F [B]
+include Unit_param []
+
+(* Template functor types.  No arrow after a template parameter. *)
+
+module type T_template = [X : S] sig
+  val v : X.t
+end
+
+module type T_unit = [] sig
+  val v : int
+end
+
+(* An unnamed parameter is spelt [_]. *)
+
+module type T_unnamed = [_ : S] S
+module type T_nested = [X : S] [Y : S] S
+module type T_mixed = [X : S] (Y : S) -> S
+module type T_plain_first = (Y : S) -> [X : S] S
+
+(* The body reaches as far right as it can: this is [[S] (S -> S)]. *)
+
+module type T_body_extends = [_ : S] S -> S
+
+(* [>] and []] would fuse into one token. *)
+
+module type T_fused = [X : S with type t = < a : int > ] S
+
+module Fused [X : S with type t = < a : int > ] = struct
+  let v = 0
+end
+
+(* Comments around template parameters and arguments. *)
+
+module Commented [(* before the name *) X : S] = struct
+  let v = 0
+end
+
+module Commented_arg = F [(* before the argument *) B]
+
+module Commented_unit [ (* nothing here *) ] = struct
+  let v = 0
+end

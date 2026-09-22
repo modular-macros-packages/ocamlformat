@@ -612,7 +612,7 @@ let mklbs rf lb =
   } in
   addlb lbs lb
 
-let mk_let_bindings { lbs_bindings; lbs_rec; lbs_has_ext=_ } =
+let mk_let_bindings ?(macro = Value) { lbs_bindings; lbs_rec; lbs_has_ext=_ } =
   let pvbs_bindings =
     List.rev_map
       (fun lb ->
@@ -621,10 +621,10 @@ let mk_let_bindings { lbs_bindings; lbs_rec; lbs_has_ext=_ } =
            lb.lb_pattern lb.lb_args lb.lb_body)
       lbs_bindings
   in
-  { pvbs_bindings; pvbs_rec = lbs_rec }
+  { pvbs_bindings; pvbs_rec = lbs_rec; pvbs_macro = macro }
 
-let val_of_let_bindings ~loc lbs =
-  mkstr ~loc (Pstr_value (mk_let_bindings lbs))
+let val_of_bindings ~loc lbs macro =
+  mkstr ~loc (Pstr_value (mk_let_bindings ~macro lbs))
 
 let expr_of_let_bindings ~loc ~loc_in lbs body =
   mkexp ~loc (Pexp_let (mk_let_bindings lbs, body, loc_in))
@@ -757,6 +757,14 @@ let mk_directive ~loc name arg =
    string that will not trigger a syntax error; see how [not_expecting]
    is used in the definition of [type_variance]. */
 
+%token LESSLESS               "<<"
+%token GREATERGREATER         ">>"
+%token DOLLARLPAREN           "$("
+%token <string> DOLLARLIDENT  "$lident" (* just an example *)
+%token <string> DOLLARUIDENT  "$Uident" (* just an example *)
+%token DOLLARLET              "$let"
+%token DOLLARVAL              "$val"
+%token DOLLARGEN              "$gen"
 %token AMPERAMPER             "&&"
 %token AMPERSAND              "&"
 %token AND                    "and"
@@ -876,7 +884,7 @@ let mk_directive ~loc name arg =
 %token TRUE                   "true"
 %token TRY                    "try"
 %token TYPE                   "type"
-%token <string> UIDENT        "UIdent" (* just an example *)
+%token <string> UIDENT        "UIdent" 
 %token UNDERSCORE             "_"
 %token VAL                    "val"
 %token VIRTUAL                "virtual"
@@ -888,7 +896,7 @@ let mk_directive ~loc name arg =
 
 %token EOL                    "\\n"      (* not great, but EOL is unused *)
 
-%token <string> TYPE_DISAMBIGUATOR "2" (* just an example *)
+%token <string> TYPE_DISAMBIGUATOR "2" 
 
 (* see the [metaocaml_expr] comment *)
 %token METAOCAML_ESCAPE       ".~"
@@ -959,6 +967,7 @@ The precedences must be listed from low to high.
           NEW PREFIXOP STRING TRUE UIDENT UNDERSCORE
           LBRACKETPERCENT QUOTED_STRING_EXPR
           METAOCAML_BRACKET_OPEN METAOCAML_ESCAPE
+          LESSLESS DOLLARLPAREN DOLLARLIDENT DOLLARUIDENT
 
 /* Entry points */
 
@@ -1423,19 +1432,38 @@ parse_any_longident:
     { $1 }
 ;
 
+%inline nonempty_plain_functor_args:
+  nonempty_llist(mkloc(plain_functor_arg))
+    { $1 }
+;
+
 functor_arg:
+    arg = plain_functor_arg
+      { arg }
+  | arg = template_functor_arg
+      { arg }
+;
+
+plain_functor_arg:
     (* An anonymous and untyped argument. *)
     LPAREN RPAREN
-      { Unit }
+      { Unit Plain }
   | (* An argument accompanied with an explicit type. *)
     LPAREN x = mkrhs(module_name) COLON mty = module_type RPAREN
-      { (Named (x, mty)) }
+      { (Named (Plain, x, mty)) }
+;
+
+template_functor_arg:
+    LBRACKET RBRACKET
+      { Unit Template }
+  | LBRACKET x = mkrhs(module_name) COLON mty = module_type RBRACKET
+      { (Named (Template, x, mty)) }
 ;
 
 functor_parameters_type_arrow:
-  FUNCTOR attrs = attributes args = nonempty_functor_args MINUSGREATER
+  FUNCTOR attrs = attributes args = nonempty_plain_functor_args MINUSGREATER
     { Pfunctorty_keyword (attrs, args) }
-  | args = nonempty_functor_args MINUSGREATER
+  | args = nonempty_plain_functor_args MINUSGREATER
     { Pfunctorty_short args }
   | arg = module_type MINUSGREATER
     { Pfunctorty_unnamed arg }
@@ -1484,10 +1512,16 @@ module_expr:
         { Pmod_ident x }
     | (* In a functor application, the actual argument must be parenthesized. *)
       me1 = module_expr me2 = paren_module_expr
-        { Pmod_apply(me1, me2) }
+        { Pmod_apply(Plain, me1, me2) }
     | (* Functor applied to unit. *)
       me = module_expr LPAREN RPAREN
-        { Pmod_apply_unit (me, make_loc ($startpos($2), $endpos($3))) }
+        { Pmod_apply_unit (Plain, me, make_loc ($startpos($2), $endpos($3))) }
+    | 
+      me1 = module_expr LBRACKET me2 = module_expr RBRACKET
+        { Pmod_apply(Template, me1, me2) }
+    | 
+      me = module_expr LBRACKET RBRACKET
+        { Pmod_apply_unit (Template, me, make_loc ($startpos($2), $endpos($3))) }
     | (* An extension. *)
       ex = extension
         { Pmod_extension ex }
@@ -1575,7 +1609,11 @@ structure:
 (* A structure item. *)
 structure_item:
     let_bindings(ext)
-      { val_of_let_bindings ~loc:$sloc $1 }
+      { val_of_bindings ~loc:$sloc $1 Value }
+  | macro_bindings
+      { val_of_bindings ~loc:$sloc $1 Macro }
+  | static_bindings
+      { val_of_bindings ~loc:$sloc $1 Static }
   | wrap_mkstr_ext(
       include_statement(module_expr)
         { pstr_include $1 }
@@ -1797,6 +1835,15 @@ module_type:
     | params = functor_parameters_type_arrow mty = module_type
         %prec below_WITH
         { (Pmty_functor (params, mty)) }
+    | 
+      param = mkloc(template_functor_arg) cod = module_type
+        %prec below_WITH
+        { (Pmty_functor (Pfunctorty_short [param], cod)) }
+    | param = mkloc(LBRACKET dom = module_type RBRACKET
+                      { Named (Template, mknoloc None, dom) })
+      cod = module_type
+        %prec below_WITH
+        { (Pmty_functor (Pfunctorty_short [param], cod)) }
     | module_type WITH separated_nonempty_llist(AND, with_constraint)
         { Pmty_with($1, $3) }
 /*  | LPAREN MODULE mkrhs(mod_longident) RPAREN
@@ -1830,6 +1877,10 @@ signature_item:
     | floating_attribute
         { psig_attribute $1 }
     | value_description
+        { psig_value $1 }
+    | macro_description
+        { psig_value $1 }
+    | static_val_description
         { psig_value $1 }
     | primitive_declaration
         { psig_value $1 }
@@ -2720,6 +2771,18 @@ simple_expr:
   | mod_longident DOT
     LPAREN MODULE ext_attributes module_expr COLON error
       { unclosed "(" $loc($3) ")" $loc($8) }
+  | LESSLESS seq_expr GREATERGREATER
+       { Pexp_quote $2 }
+  | DOLLARLPAREN seq_expr RPAREN
+       { Pexp_splice $2 }
+  | DOLLARLPAREN seq_expr error
+       { unclosed "$(" $loc($1) ")" $loc($3) }
+  | id = DOLLARLIDENT
+       { Pexp_splice (mkexpvar ~loc:$sloc id) }
+  | p = dollar_mod_longident DOT id = val_ident
+       { Pexp_splice
+           (mkexp ~loc:$sloc
+              (Pexp_ident (mkrhs (ldot p $loc(p) id $loc(id)) $sloc))) }
 ;
 labeled_simple_expr:
     simple_expr %prec below_HASH
@@ -2815,6 +2878,44 @@ and_let_binding:
       let docs = symbol_docs $sloc in
       let attrs = Attr.ext_attrs ~before:attrs1 ~after:attrs2 () in
       mklb ~text ~docs ~loc:$sloc body attrs
+    }
+;
+
+static_bindings:
+    static_binding                            { $1 }
+  | static_bindings and_let_binding           { addlb $1 $2 }
+;
+
+macro_bindings:
+    macro_binding                             { $1 }
+  | macro_bindings and_let_binding            { addlb $1 $2 }
+;
+
+%inline static_binding:
+  DOLLARLET
+  ext = ext
+  attrs1 = attributes
+  rec_flag = rec_flag
+  body = let_binding_body
+  attrs2 = post_item_attributes
+    {
+      let docs = symbol_docs $sloc in
+      let attrs = Attr.ext_attrs ?ext ~before:attrs1 ~after:attrs2 () in
+      mklbs rec_flag (mklb ~loc:$sloc body ~docs attrs)
+    }
+;
+
+%inline macro_binding:
+  DOLLARGEN
+  ext = ext
+  attrs1 = attributes
+  rec_flag = rec_flag
+  body = let_binding_body
+  attrs2 = post_item_attributes
+    {
+      let docs = symbol_docs $sloc in
+      let attrs = Attr.ext_attrs ?ext ~before:attrs1 ~after:attrs2 () in
+      mklbs rec_flag (mklb ~loc:$sloc body ~docs attrs)
     }
 ;
 letop_binding_body:
@@ -3290,7 +3391,37 @@ value_description:
     { let attrs = Attr.ext_attrs ?ext ~before:attrs1 ~after:attrs2 () in
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
-      Val.mk id ty ~attrs ~loc ~docs
+      Val.mk Value id ty ~attrs ~loc ~docs
+    }
+;
+
+static_val_description:
+  DOLLARVAL
+  ext = ext
+  attrs1 = attributes
+  id = mkrhs(val_ident)
+  COLON
+  ty = possibly_poly(core_type)
+  attrs2 = post_item_attributes
+    { let attrs = Attr.ext_attrs ?ext ~before:attrs1 ~after:attrs2 () in
+      let loc = make_loc $sloc in
+      let docs = symbol_docs $sloc in
+      Val.mk Static id ty ~attrs ~loc ~docs
+    }
+;
+
+macro_description:
+  DOLLARGEN
+  ext = ext
+  attrs1 = attributes
+  id = mkrhs(val_ident)
+  COLON
+  ty = possibly_poly(core_type)
+  attrs2 = post_item_attributes
+    { let attrs = Attr.ext_attrs ?ext ~before:attrs1 ~after:attrs2 () in
+      let loc = make_loc $sloc in
+      let docs = symbol_docs $sloc in
+      Val.mk Macro id ty ~attrs ~loc ~docs
     }
 ;
 
@@ -3309,7 +3440,7 @@ primitive_declaration:
     { let attrs = Attr.ext_attrs ?ext ~before:attrs1 ~after:attrs2 () in
       let loc = make_loc $sloc in
       let docs = symbol_docs $sloc in
-      Val.mk id ty ~prim ~attrs ~loc ~docs
+      Val.mk Value id ty ~prim ~attrs ~loc ~docs
     }
 ;
 
@@ -4183,6 +4314,11 @@ type_longident:
 ;
 mod_longident:
     mk_longident(mod_longident, UIDENT)  { $1 }
+;
+dollar_mod_longident:
+    s = DOLLARUIDENT { Lident s }
+  | p = dollar_mod_longident DOT s = UIDENT
+      { ldot p $loc(p) s $loc(s) }
 ;
 mod_ext_longident:
     mk_longident(mod_ext_longident, UIDENT) { $1 }

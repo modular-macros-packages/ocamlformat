@@ -123,6 +123,17 @@ let fmt_rec_flag f x =
   | Nonrecursive -> fprintf f "Nonrec"
   | Recursive -> fprintf f "Rec"
 
+let fmt_macro_flag f x =
+  match x with
+  | Value -> fprintf f "Value"
+  | Static -> fprintf f "Static"
+  | Macro -> fprintf f "Macro"
+
+let fmt_functor_kind f x =
+  match x with
+  | Plain -> fprintf f "Plain"
+  | Template -> fprintf f "Template"
+
 let fmt_direction_flag f x =
   match x with
   | Upto -> fprintf f "Up"
@@ -498,6 +509,12 @@ and expression i ppf x =
   | Pexp_extension (s, arg) ->
       line i ppf "Pexp_extension %a\n" fmt_string_loc s;
       payload i ppf arg
+  | Pexp_quote e ->
+      line i ppf "Pexp_quote\n";
+      expression i ppf e
+  | Pexp_splice e ->
+      line i ppf "Pexp_splice\n";
+      expression i ppf e
   | Pexp_unreachable ->
       line i ppf "Pexp_unreachable\n"
   | Pexp_struct_item (si, e, iea) ->
@@ -587,7 +604,8 @@ and type_constraint i ppf constraint_ =
       core_type (i+1) ppf ty2
 
 and value_description i ppf x =
-  line i ppf "value_description %a %a\n" fmt_string_loc
+  line i ppf "value_description %a %a %a\n" fmt_macro_flag x.pval_macro
+       fmt_string_loc
        x.pval_name fmt_location x.pval_loc;
   ext_attrs i ppf x.pval_attributes;
   core_type (i+1) ppf x.pval_type;
@@ -871,10 +889,10 @@ and functor_parameter i ppf x =
   functor_parameter' (i + 1) ppf x.txt
 
 and functor_parameter' i ppf = function
-  | Unit ->
-      line i ppf "Unit\n"
-  | Named (s, mt) ->
-      line i ppf "Named %a\n" fmt_str_opt_loc s;
+  | Unit k ->
+      line i ppf "Unit %a\n" fmt_functor_kind k
+  | Named (k, s, mt) ->
+      line i ppf "Named %a %a\n" fmt_functor_kind k fmt_str_opt_loc s;
       module_type i ppf mt
 
 and functor_parameter_type i ppf p =
@@ -1016,8 +1034,8 @@ and module_expr i ppf x =
       line i ppf "Pmod_functor\n";
       list i functor_parameter ppf params;
       module_expr i ppf me
-  | Pmod_apply (me1, me2) ->
-      line i ppf "Pmod_apply\n";
+  | Pmod_apply (k, me1, me2) ->
+      line i ppf "Pmod_apply %a\n" fmt_functor_kind k;
       module_expr i ppf me1;
       module_expr i ppf me2;
   | Pmod_constraint (me, mt) ->
@@ -1029,8 +1047,8 @@ and module_expr i ppf x =
       expression i ppf e;
       option i package_type ppf ty1;
       option i package_type ppf ty2
-  | Pmod_apply_unit (x, loc) ->
-      line i ppf "Pmod_apply_unit\n";
+  | Pmod_apply_unit (k, x, loc) ->
+      line i ppf "Pmod_apply_unit %a\n" fmt_functor_kind k;
       module_expr i ppf x;
       line (i+1) ppf "() %a" fmt_location loc
   | Pmod_extension (s, arg) ->
@@ -1050,7 +1068,8 @@ and structure_item i ppf x =
       attributes i ppf attrs;
       expression i ppf e;
   | Pstr_value l ->
-      line i ppf "Pstr_value %a\n" fmt_rec_flag l.pvbs_rec;
+      line i ppf "Pstr_value %a %a\n" fmt_rec_flag l.pvbs_rec
+        fmt_macro_flag l.pvbs_macro;
       value_bindings i ppf l
   | Pstr_primitive vd ->
       line i ppf "Pstr_primitive\n";

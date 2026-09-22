@@ -1,0 +1,81 @@
+(* MacoCaml quotations and splices.  Both are simple (atomic)
+   expressions: they never need parentheses of their own. *)
+
+$gen zero = << 0 >>
+$gen pair x y = << ($x, $y) >>
+
+(* The three spellings of a splice. *)
+
+let a = $zero
+let b = $zero
+let c = $Lib.zero
+let d = $Lib.Deep.zero
+
+(* A glued [$gen] lexes as a keyword, so a splice of an identifier spelt
+   [gen] keeps the parenthesised form. *)
+
+let gen = 1
+let e = $(gen)
+
+(* A prefix operator must not be glued to a quotation or a splice: [!$]
+   and [-$] are operators. *)
+
+let f = ! $a
+let g = ! << 0 >>
+let h = - $(succ n)
+let i = - $zero
+
+(* A [$] that is not glued to an identifier, an uppercase identifier or a
+   parenthesis is an ordinary operator. *)
+
+let j = f $ $a
+let k = a $$ $b
+let l = ( $ )
+let m = ( $$ )
+let n = List.fold_left ( $ ) x [ $a; $b ]
+
+(* [>>] is reserved inside a quotation, so [<< a >> b] is an
+   application. *)
+
+let o = << a >> b
+let p = f << a >> $b
+
+(* Splices in every argument position. *)
+
+let q = $f x
+let r = $(f x) y
+let s = $x.field
+let t = $(record ()).field
+let u = match $scrutinee with Some x -> $(some x) | None -> $none
+
+(* Nesting. *)
+
+$gen v = << << $(pair << 1 >> << 2 >>) >> >>
+let w = $($inner)
+
+(* Comments may not be moved out of the parentheses of a splice, nor out
+   of a quotation. *)
+
+let x = $(y (* trailing *))
+let y = $((* leading *) z)
+let z = << (* inside the quotation *) w >>
+let aa = << $((* between the dollar-paren and the close *) bb) >>
+
+(* Long bodies break inside the delimiters. *)
+
+let bb =
+  << List.fold_left (fun acc x -> acc + x) 0 [ 1; 2; 3; 4; 5; 6; 7; 8; 9 ] >>
+
+let cc =
+  << if $condition then $(then_branch ()) else $(else_branch_with_a_name ()) >>
+
+let dd =
+  <<
+    let x = $(binding ()) in
+    x + $(other_binding ()) + 1
+  >>
+
+(* A quotation carrying an attribute. *)
+
+let ee = << 0 >> [@attr]
+let ff = << 0 >> [@@item_attr]

@@ -23,6 +23,10 @@
 
 ocamlformat is part of the [OCaml Platform](https://ocaml.org/docs/platform), the recommended set of tools for OCaml.
 
+### MacoCaml
+
+This branch (`macocaml-port`) additionally formats sources written in the syntax of MacoCaml, the compile-time macro and template functor extension of OCaml: quotations `<< e >>`, splices `$(e)` / `$x` / `$M.x`, static and macro bindings `$let` / `$gen`, the matching `$val` / `$gen` signature items, and template functors `module F [X : S] = ...`, `F [M]`, `module type T = [X : S] S`. The tool only needs to *parse* that syntax, so it is built and tested with a **stock** OCaml compiler (5.5) exactly as upstream ocamlformat is; no MacoCaml compiler is required to build or run it. See `T38-SPEC.md` for the details of the extension and `test/passing/tests/macocaml_*.ml{,i}` for worked examples.
+
 ## Getting Started
 
 ### Installation

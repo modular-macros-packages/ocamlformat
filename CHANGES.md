@@ -4,6 +4,35 @@ Items marked with an asterisk (\*) are changes that are likely to format
 existing code differently from the previous release when using the default
 profile. This started with version 0.26.0.
 
+## unreleased
+
+### Highlight
+
+- Support MacoCaml syntax
+  This branch (`macocaml-port`) parses and prints the syntax of the MacoCaml
+  fork of OCaml on top of stock OCaml 5.5 syntax.  ocamlformat itself is
+  still built by a stock compiler; it only has to *parse* MacoCaml.  The
+  constructs are:
+  ```ocaml
+  << e >>                     (* a quotation *)
+  $(e)   $x   $M.x            (* a splice, in its three spellings *)
+  $let x = e   $let rec ...   (* a static binding *)
+  $gen f x = e                (* a macro binding *)
+  $val x : t   $gen f : t     (* static and macro value descriptions *)
+  module F [X : S] = ...      (* a template functor *)
+  module G [] = ...           (* ... with a unit parameter *)
+  module A = F [M]            (* a template functor application *)
+  module type T = [X : S] S   (* a template functor type, with no arrow *)
+  ```
+  A quotation always keeps a blank inside its delimiters, a splice never has
+  one after its `$`, and a `$let` / `$gen` item lays out exactly like the
+  `let` it mirrors, under every profile.  `$(x)` is shortened to `$x` unless
+  a comment would be dropped with the parentheses or the identifier is one
+  the lexer would read as a keyword (`$gen`).
+
+  Regression tests live in `test/passing/tests/macocaml_*.ml{,i}`, with
+  reference outputs for all four profiles.
+
 ## 0.29.0
 
 ### Highlight

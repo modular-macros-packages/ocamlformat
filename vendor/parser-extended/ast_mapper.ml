@@ -430,8 +430,9 @@ module CT = struct
 end
 
 let map_functor_param' sub = function
-  | Unit -> Unit
-  | Named (s, mt) -> Named (map_loc map_string_opt sub s, sub.module_type sub mt)
+  | Unit k -> Unit k
+  | Named (k, s, mt) ->
+      Named (k, map_loc map_string_opt sub s, sub.module_type sub mt)
 
 let map_functor_param sub {loc; txt} =
   let loc = sub.location sub loc in
@@ -525,10 +526,11 @@ module M = struct
         functor_ ~loc ~attrs
           (map_functor_params sub params)
           (sub.module_expr sub body)
-    | Pmod_apply (m1, m2) ->
-        apply ~loc ~attrs (sub.module_expr sub m1) (sub.module_expr sub m2)
-    | Pmod_apply_unit (me, lc) ->
-        apply_unit ~loc ~attrs (sub.module_expr sub me) (sub.location sub lc)
+    | Pmod_apply (k, m1, m2) ->
+        apply ~loc ~attrs k (sub.module_expr sub m1) (sub.module_expr sub m2)
+    | Pmod_apply_unit (k, me, lc) ->
+        apply_unit ~loc ~attrs k (sub.module_expr sub me)
+          (sub.location sub lc)
     | Pmod_constraint (m, mty) ->
         constraint_ ~loc ~attrs (sub.module_expr sub m)
                     (sub.module_type sub mty)
@@ -702,6 +704,8 @@ module E = struct
           (List.map (sub.binding_op sub) ands) (sub.expr sub body)
     | Pexp_extension x -> extension ~loc ~attrs (sub.extension sub x)
     | Pexp_unreachable -> unreachable ~loc ~attrs ()
+    | Pexp_quote e -> quote ~loc ~attrs (sub.expr sub e)
+    | Pexp_splice e -> splice ~loc ~attrs (sub.expr sub e)
     | Pexp_struct_item (si, e, iea) ->
         struct_item ~loc ~attrs ~infix_ext_attrs:(sub.infix_ext_attrs sub iea) (sub.structure_item sub si) (sub.expr sub e)
     (* Added *)
@@ -730,9 +734,9 @@ module E = struct
 end
 
 module PVB = struct
-  let map_value_bindings sub { pvbs_bindings; pvbs_rec } =
+  let map_value_bindings sub { pvbs_bindings; pvbs_rec; pvbs_macro } =
     let pvbs_bindings = List.map (sub.value_binding sub) pvbs_bindings in
-    { pvbs_bindings; pvbs_rec }
+    { pvbs_bindings; pvbs_rec; pvbs_macro }
 end
 
 module P = struct
@@ -901,9 +905,10 @@ let default_mapper =
     extension_constructor = T.map_extension_constructor;
     package_type = map_package_type;
     value_description =
-      (fun this {pval_name; pval_type; pval_prim; pval_loc;
+      (fun this {pval_name; pval_type; pval_prim; pval_macro; pval_loc;
                  pval_attributes} ->
         Val.mk
+          pval_macro
           (map_loc map_string this pval_name)
           (this.typ this pval_type)
           ~attrs:(this.ext_attrs this pval_attributes)
