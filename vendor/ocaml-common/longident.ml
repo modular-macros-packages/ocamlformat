@@ -13,10 +13,12 @@
 (*                                                                        *)
 (**************************************************************************)
 
+type functor_kind = Template | Plain
+
 type t =
     Lident of string
   | Ldot of t Location.loc * string Location.loc
-  | Lapply of t Location.loc * t Location.loc
+  | Lapply of functor_kind * t Location.loc * t Location.loc
 
 
 let rec same t t' =
@@ -30,23 +32,23 @@ let rec same t t' =
         same t t'
       else
         false
-  | Lapply ({ txt = tl; _ }, { txt = tr; _ }),
-    Lapply ({ txt = tl'; _ }, { txt = tr'; _ }) ->
-      same tl tl' && same tr tr'
+  | Lapply (kind, { txt = tl; _ }, { txt = tr; _ }),
+    Lapply (kind', { txt = tl'; _ }, { txt = tr'; _ }) ->
+      kind = kind' && same tl tl' && same tr tr'
   | _, _ -> false
 
 
 let rec flat accu = function
     Lident s -> s :: accu
   | Ldot({ txt = lid; _ }, { txt = s; _ }) -> flat (s :: accu) lid
-  | Lapply(_, _) -> Misc.fatal_error "Longident.flat"
+  | Lapply _ -> Misc.fatal_error "Longident.flat"
 
 let flatten lid = flat [] lid
 
 let last = function
     Lident s -> s
   | Ldot(_, s) -> s.txt
-  | Lapply(_, _) -> Misc.fatal_error "Longident.last"
+  | Lapply _ -> Misc.fatal_error "Longident.last"
 
 
 let rec split_at_dots s pos =

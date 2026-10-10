@@ -1,0 +1,22 @@
+(* MacoCaml: the splice shorthand takes identifiers with letters outside
+   ASCII (fork ca7552bd42), so these splices print short. *)
+
+let xé = << 1 >>
+
+let a = << $xé + 1 >>
+
+let été = << 2 >>
+
+let b = << $été + 1 >>
+
+let c = << $(été) * 2 >>
+
+module Été = struct
+  let x = << 3 >>
+end
+
+let d = << $Été.x + 1 >>
+
+$let yé = << 10 >>
+
+let n = $(<< $yé + 1 >>)

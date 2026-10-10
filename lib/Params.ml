@@ -413,6 +413,7 @@ module Mod = struct
     match arg.txt with
     | Named
         ( _
+        , _
         , { pmty_desc=
               Pmty_signature _ | Pmty_typeof {pmod_desc= Pmod_structure _; _}
           ; _ } ) ->
@@ -1051,7 +1052,7 @@ let get_pexp_struct_item_break_in (c : Conf.t) {ast; ctx= _} =
     | Pmod_structure _ | Pmod_functor (_, {pmod_desc= Pmod_structure _; _})
       ->
         true
-    | Pmod_apply (lhs, {pmod_desc= Pmod_structure _; _}) ->
+    | Pmod_apply (_, lhs, {pmod_desc= Pmod_structure _; _}) ->
         Ast.Mod.is_simple lhs
     | _ -> false
   in

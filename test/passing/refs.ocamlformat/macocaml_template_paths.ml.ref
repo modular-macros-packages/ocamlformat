@@ -1,0 +1,116 @@
+(* MacoCaml template applications in paths: templates are applicative, so
+   the application of a template to a module path is itself a path, spelt as
+   the application is: F$(M).t for a template, F(M).t for a functor, and
+   F$(M)(N).t for parameters of both kinds.  A path carries no blank before
+   the dollar, exactly as F(M).t carries none before the parenthesis, and as
+   a template application in a module expression (F$(M)) carries none. *)
+
+module type S = sig
+  type t
+
+  val mk : int -> t
+end
+
+module F $(X : S) = struct
+  type t = X.t list
+
+  let mk n = [X.mk n]
+end
+
+module G (X : S) = struct
+  type t = X.t option
+
+  let mk n = Some (X.mk n)
+end
+
+module H $(X : S) (Y : S) = struct
+  type t = X.t * Y.t
+
+  let mk n = (X.mk n, Y.mk n)
+end
+
+module M = struct
+  type t = int
+
+  let mk n = n
+end
+
+module N = M
+module FM = F$(M)
+
+(* Type paths through each kind of application. *)
+
+type u = F$(M).t
+
+type v = G(M).t
+
+type w = H$(M)(N).t
+
+type nested = F$(F$(M)).t
+
+type qualified = Outer.F$(Inner.M).t
+
+type plain_then_template = G(M)$(N).t
+
+type params = (int, F$(M).t) Hashtbl.t
+
+type 'a with_param = 'a F$(M).u
+
+let x : F$(M).t = FM.mk 1
+
+let y (x : H$(M)(N).t) : H$(M)(N).t = x
+
+(* Module type paths. *)
+
+module type T = F$(M).S
+
+module type U = H$(M)(N).S
+
+module Ascribed : F$(M).S = struct end
+
+module type Constrained = sig
+  module X : S
+
+  module Y : S
+
+  type t
+end
+with module X = M
+ and module Y = F$(M)
+ and type t = F$(M).t
+
+module type Of = module type of F$(M)
+
+(* Class types, #-types, local opens, polymorphic variant patterns and type
+   extensions. *)
+
+class type ct = object
+  inherit F$(M).ct
+end
+
+type obj = #F$(M).c
+
+type local = F$(M).(t * t)
+
+let is_t = function #F$(M).t -> true | _ -> false
+
+type F$(M).ext += Extra
+
+(* First-class modules. *)
+
+let pack (m : (module F$(M).S)) = m
+
+(* Comments inside a path. *)
+
+type c1 = F$((* argument *) M).t
+
+type c2 = F$(M (* after *)).t
+
+type c3 = F (* before the dollar *)$(M).t
+
+(* A path long enough to break. *)
+
+type long =
+  A_template_with_a_rather_long_name$(An_argument_with_a_rather_long_name)
+    (Another_argument_with_a_long_name)
+  .t

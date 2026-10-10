@@ -259,6 +259,8 @@ module Exp = struct
     mk ?loc ?attrs (Pexp_letop {let_; ands; body; loc_in})
   let extension ?loc ?attrs a = mk ?loc ?attrs (Pexp_extension a)
   let unreachable ?loc ?attrs () = mk ?loc ?attrs Pexp_unreachable
+  let quote ?loc ?attrs a = mk ?loc ?attrs (Pexp_quote a)
+  let splice ?loc ?attrs a = mk ?loc ?attrs (Pexp_splice a)
   let struct_item ?loc ?attrs ?(infix_ext_attrs=Attr.empty_infix_ext_attrs) si e =
     mk ?loc ?attrs (Pexp_struct_item (si, e, infix_ext_attrs))
   (* Added *)
@@ -313,8 +315,9 @@ module Mod = struct
   let structure ?loc ?attrs x = mk ?loc ?attrs (Pmod_structure x)
   let functor_ ?loc ?attrs arg body =
     mk ?loc ?attrs (Pmod_functor (arg, body))
-  let apply ?loc ?attrs m1 m2 = mk ?loc ?attrs (Pmod_apply (m1, m2))
-  let apply_unit ?loc ?attrs a b = mk ?loc ?attrs (Pmod_apply_unit (a, b))
+  let apply ?loc ?attrs k m1 m2 = mk ?loc ?attrs (Pmod_apply (k, m1, m2))
+  let apply_unit ?loc ?attrs k a b =
+    mk ?loc ?attrs (Pmod_apply_unit (k, a, b))
   let constraint_ ?loc ?attrs m mty = mk ?loc ?attrs (Pmod_constraint (m, mty))
   let unpack ?loc ?attrs a b c = mk ?loc ?attrs (Pmod_unpack (a, b, c))
   let extension ?loc ?attrs a = mk ?loc ?attrs (Pmod_extension a)
@@ -465,9 +468,10 @@ end
 
 module Val = struct
   let mk ?(loc = !default_loc) ?(attrs = Attr.empty_ext_attrs) ?(docs = empty_docs)
-        ?(prim = []) name typ =
+        ?(prim = []) mac_flag name typ =
     {
      pval_name = name;
+     pval_macro = mac_flag;
      pval_type = typ;
      pval_attributes = add_docs_attrs' docs attrs;
      pval_loc = loc;
@@ -645,28 +649,32 @@ module Te = struct
     }
 
   let constructor ?(loc = !default_loc) ?(attrs = [])
-        ?(docs = empty_docs) ?(info = empty_info) name kind =
+        ?(docs = empty_docs) ?(info = empty_info) ~static name kind =
     {
      pext_name = name;
      pext_kind = kind;
+     pext_static = static;
      pext_loc = loc;
      pext_attributes = add_docs_attrs docs (add_info_attrs info attrs);
     }
 
   let decl ?(loc = !default_loc) ?(attrs = []) ?(docs = empty_docs)
-         ?(info = empty_info) ?(vars = []) ?(args = Pcstr_tuple []) ?res name =
+         ?(info = empty_info) ?(vars = []) ?(args = Pcstr_tuple []) ?res
+         ~static name =
     {
      pext_name = name;
      pext_kind = Pext_decl(vars, args, res);
+     pext_static = static;
      pext_loc = loc;
      pext_attributes = add_docs_attrs docs (add_info_attrs info attrs);
     }
 
   let rebind ?(loc = !default_loc) ?(attrs = [])
-        ?(docs = empty_docs) ?(info = empty_info) name lid =
+        ?(docs = empty_docs) ?(info = empty_info) ~static name lid =
     {
      pext_name = name;
      pext_kind = Pext_rebind lid;
+     pext_static = static;
      pext_loc = loc;
      pext_attributes = add_docs_attrs docs (add_info_attrs info attrs);
     }

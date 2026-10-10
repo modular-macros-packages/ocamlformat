@@ -1,0 +1,121 @@
+(* MacoCaml compile-time extension constructors: a declaration marked with a
+   dollar, exception $E or type t += $A, makes a compile-time constructor; an
+   unmarked one makes a run-time constructor.  The mark belongs to the
+   declaration and is never written at a use, so raise (E 1) and
+   with E _ -> are unchanged.  Ordinary variant constructors cannot be
+   marked. *)
+
+exception $E
+
+exception $E2 of int * string
+
+module M = struct
+  exception E
+end
+
+exception $F = M.E
+
+type t = ..
+
+type t += $A | $B of int
+
+type t += C | $D
+
+type t += $G : int -> t
+
+type t +=
+  | $H : {
+      x : int;
+      y : string;
+    }
+      -> t
+
+type t += $X : 'a. 'a * ('a -> string) -> t
+
+exception
+  $R of {
+    field : int;
+    other : string;
+  }
+
+type t += private $P
+
+type t += $Alias = A | $Other = C | Runtime_alias = B
+
+type v =
+  | V1
+  | V2 of int (* ordinary constructors carry no mark *)
+
+(* Attributes, extension nodes and comments on marked constructors. *)
+
+exception $Attr of int [@attr]
+
+exception [@before] $Before [@after] [@@item]
+
+exception%ext $Ext
+
+exception $Rebound = M.E [@attr] [@@item]
+
+type t += $Ta [@a] | $Tb of int [@b] [@@item]
+
+exception (* before the name *) $Cmt1 (* after the name *) of int
+
+type t += (* first *) $Cmt2 | $Cmt3 of (* argument *) int
+
+(** A documented compile-time exception. *)
+exception $Doc of string
+
+type t += $Da  (** first *) | $Db of int  (** second *)
+
+(* Long declarations break exactly like their unmarked counterparts. *)
+
+type t +=
+  | $Long_constructor_name_one of int * string * float * bool * char
+  | $Long_constructor_name_two of int list * string option * (int -> unit)
+
+exception $Long_exception_name of int * string * float * bool * char * int list
+
+type t += $Long_gadt_constructor : int * string * float * bool * char -> t
+
+(* Local declarations. *)
+
+let local x =
+  let exception $Local of int in
+  try raise (Local x) with Local y -> y
+
+let local_ext () =
+  let type t += $Lext in
+  Lext
+
+(* Uses carry no mark. *)
+
+let f x = if x < 0 then raise (E2 (x, "negative")) else x
+
+let g () =
+  try f (-1) with
+  | E2 (n, _) -> n
+  | E -> 0
+
+let h = function
+  | A -> 1
+  | B n -> n
+  | C | D -> 0
+  | G n -> n
+  | _ -> -1
+
+let k () = raise (E 1)
+
+let j () =
+  try k () with
+  | E _ -> ()
+  | Doc s -> print_string s
+
+module type S = sig
+  exception $E of int
+
+  type t += $A
+
+  type t += B | $C of int * string
+
+  exception [@a] $Sig_attr [@b] [@@c]
+end

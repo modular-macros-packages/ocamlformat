@@ -88,6 +88,76 @@ let compose_module ?box ?pro ?epi blk ~f =
   let bdy, epi' = compose_module' ?box ?pro blk in
   f (bdy $ epi') $ fmt_opt epi
 
+let functor_param_delims = function
+  | Template -> ("$(", ")")
+  | Plain -> ("(", ")")
+
+let functor_param_kind = function Unit k -> k | Named (k, _, _) -> k
+
+let macocaml_dollar_ident ~capitalized s =
+  (not (String.is_empty s))
+  && Misc.Utf8_lexeme.is_valid_identifier s
+  && Bool.equal (Misc.Utf8_lexeme.is_capitalized s) capitalized
+
+let rec macocaml_dollar_path : Longident.t -> string option =
+  let is_uident s = macocaml_dollar_ident ~capitalized:true s in
+  function
+  | Lident s when is_uident s -> Some s
+  | Ldot (p, s) when is_uident s.txt ->
+      Option.map (macocaml_dollar_path p.txt) ~f:(fun p -> p ^ "." ^ s.txt)
+  | _ -> None
+
+let macocaml_gluable s = not (String.equal s "_" || Lexer.is_keyword s)
+
+let macocaml_splice_ident =
+  let is_lident s =
+    macocaml_dollar_ident ~capitalized:false s && macocaml_gluable s
+  in
+  function
+  | Longident.Lident s when is_lident s -> Some ("$" ^ s)
+  | Longident.Ldot (p, s) when is_lident s.txt ->
+      Option.map (macocaml_dollar_path p.txt) ~f:(fun p ->
+          "$" ^ p ^ "." ^ s.txt )
+  | _ -> None
+
+let macocaml_dollar_mty_path (p : Longident.t) =
+  let rec head : Longident.t -> string option = function
+    | Lident s -> Some s
+    | Ldot (p, _) -> head p.txt
+    | Lapply _ -> None
+  in
+  match head p with
+  | Some h ->
+      (not (String.is_empty h))
+      && Misc.Utf8_lexeme.is_valid_identifier h
+      && macocaml_gluable h
+  | None -> false
+
+let macocaml_short_template_domain c (mty : module_type) =
+  let rec locs ({txt; loc} : Longident.t loc) =
+    loc
+    ::
+    ( match txt with
+    | Lident _ -> []
+    | Ldot (p, s) -> s.loc :: locs p
+    | Lapply (_, p, q) -> locs p @ locs q )
+  in
+  let has_cmts loc =
+    Cmts.has_before c.cmts loc
+    || Cmts.has_within c.cmts loc
+    || Cmts.has_after c.cmts loc
+  in
+  match mty with
+  | {pmty_desc= Pmty_ident lid; pmty_attributes= []; pmty_loc}
+    when macocaml_dollar_mty_path lid.txt ->
+      let spelt_short =
+        String.is_prefix (Source.string_at c.source pmty_loc) ~prefix:"$"
+      in
+      Option.some_if
+        (spelt_short || not (List.exists (pmty_loc :: locs lid) ~f:has_cmts))
+        lid
+  | _ -> None
+
 (* Debug: catch and report failures at nearest enclosing Ast.t *)
 
 let protect =
@@ -264,10 +334,11 @@ let rec fmt_longident c (li : Longident.t) =
   | Lident id -> fmt_id id
   | Ldot (li, id) ->
       hvbox 0 (fmt_longident_loc c li $ cut_break $ str "." $ fmt_id_loc c id)
-  | Lapply (li1, li2) ->
+  | Lapply (kind, li1, li2) ->
+            let opn, cls = functor_param_delims kind in
       hvbox 2
         ( fmt_longident_loc c li1
-        $ wrap (cut_break $ str "(") (str ")") (fmt_longident_loc c li2) )
+        $ wrap (cut_break $ str opn) (str cls) (fmt_longident_loc c li2) )
 
 and fmt_longident_loc c ?pre {txt; loc} =
   let box = if Cmts.has_after c.cmts loc then hvbox 0 else Fn.id in
@@ -2289,10 +2360,11 @@ and fmt_expression c ?(box = true) ?(pro = noop) ?eol ?parens
                 $ fmt_atrs ) ) )
   | Pexp_prefix (op, e) ->
       let has_cmts = Cmts.has_before c.cmts e.pexp_loc in
+            let spc = fmt_if (Exp.exposed_left_macocaml e) (str " ") in
       pro
       $ hvbox 2
           (Params.Exp.wrap c.conf ~parens
-             ( fmt_str_loc c op $ fmt_if has_cmts cut_break
+             ( fmt_str_loc c op $ spc $ fmt_if has_cmts cut_break
              $ fmt_expression c ~box (sub_exp ~ctx e)
              $ fmt_atrs ) )
   | Pexp_apply (e0, e1N1) -> (
@@ -2970,6 +3042,37 @@ and fmt_expression c ?(box = true) ?(pro = noop) ?eol ?parens
   | Pexp_indexop_access x ->
       pro $ fmt_indexop_access c ctx ~fmt_atrs ~has_attr ~parens x
   | Pexp_hole -> pro $ hvbox 0 (fmt_hole () $ fmt_atrs)
+  | Pexp_quote e ->
+            pro
+      $ hvbox 0
+          (Params.parens_if parens c.conf
+             ( hvbox 2
+                 ( str "<<" $ space_break
+                 $ fmt_expression c ~parens:false (sub_exp ~ctx e) )
+             $ space_break $ str ">>" $ fmt_atrs ) )
+  | Pexp_splice e ->
+      let shorthand =
+                match e with
+        | {pexp_desc= Pexp_ident {txt= lid; _}; pexp_attributes= []; _}
+          when 
+               not
+                 (List.exists (Cmts.remaining_comments c.cmts)
+                    ~f:(fun cmt -> Location.contains pexp_loc (Cmt.loc cmt))
+                 ) ->
+            macocaml_splice_ident lid
+        | _ -> None
+      in
+      pro
+      $ hvbox 0
+          (Params.parens_if parens c.conf
+             ( ( match shorthand with
+               | Some s -> str s
+               | None ->
+                   hvbox 2
+                     ( str "$("
+                     $ fmt_expression c ~parens:false (sub_exp ~ctx e) )
+                   $ str ")" )
+             $ fmt_atrs ) )
   | Pexp_beginend (e, infix_ext_attrs) ->
       fmt_beginend c ~loc:pexp_loc ~box ~pro ~ctx ~ctx0 ~fmt_atrs
         ~infix_ext_attrs ~indent_wrap ?eol e
@@ -3413,13 +3516,24 @@ and fmt_case c ctx ~first ~last case =
           $ p.close_paren_branch ) )
 
 and fmt_value_description c ctx ~pro ?epi vd =
-  let {pval_name= {txt; loc}; pval_type; pval_prim; pval_attributes; pval_loc}
-      =
+  let { pval_name= {txt; loc}
+      ; pval_type
+      ; pval_prim
+      ; pval_macro
+      ; pval_attributes
+      ; pval_loc } =
     vd
   in
   update_config_maybe_disabled_str_item c pval_loc ~pro ?epi pval_attributes
   @@ fun c ->
-  let pre = if List.is_empty pval_prim then "val" else "external" in
+  let pre =
+    if not (List.is_empty pval_prim) then "external"
+    else
+      match pval_macro with
+      | Value -> "val"
+      | Static -> "$val"
+      | Macro -> "$val[..]"
+  in
   let doc_before, doc_after, attrs_before, attrs_after =
     fmt_docstring_around_item_attrs ~is_val:true c pval_attributes
   in
@@ -3784,7 +3898,8 @@ and fmt_type_exception ~pre c ctx
        $ doc_after ) )
 
 and fmt_extension_constructor c ctx ec =
-  let {pext_name; pext_kind; pext_attributes; pext_loc} = ec in
+  let {pext_name; pext_kind; pext_static; pext_attributes; pext_loc} = ec in
+    let pre = Option.some_if pext_static "$" in
   update_config_maybe_disabled c pext_loc pext_attributes
   @@ fun c ->
   let sep =
@@ -3795,7 +3910,7 @@ and fmt_extension_constructor c ctx ec =
   Cmts.fmt c pext_loc
   @@ hvbox 4
        ( hvbox 2
-           ( fmt_str_loc c pext_name
+           ( fmt_str_loc c ?pre pext_name
            $
            match pext_kind with
            | Pext_decl (_, (Pcstr_tuple [] | Pcstr_record (_, [])), None) ->
@@ -3809,13 +3924,15 @@ and fmt_extension_constructor c ctx ec =
        $ fmt_attributes_and_docstrings c pext_attributes )
 
 and fmt_functor_param c ctx {loc; txt= arg} =
+  let opn, cls = functor_param_delims (functor_param_kind arg) in
   match arg with
-  | Unit -> Cmts.fmt c loc (wrap (str "(") (str ")") (Cmts.fmt_within c loc))
-  | Named (name, mt) ->
+  | Unit _ ->
+      Cmts.fmt c loc (wrap (str opn) (str cls) (Cmts.fmt_within c loc))
+  | Named (_, name, mt) ->
       let xmt = sub_mty ~ctx mt in
       hvbox 0
         (Cmts.fmt c loc
-           (wrap (str "(") (str ")")
+           (wrap (str opn) (str cls)
               (hovbox 0
                  ( hovbox 0 (fmt_str_loc_opt c name $ space_break $ str ": ")
                  $ compose_module (fmt_module_type c xmt) ~f:Fn.id ) ) ) )
@@ -3827,8 +3944,25 @@ and fmt_functor_param_type c ctx = function
       $ fmt_attributes c ~pre:Blank attrs
       $ break 1 2
       $ list args (break 1 2) (fmt_functor_param c ctx)
-  | Pfunctorty_unnamed arg ->
+  | Pfunctorty_unnamed (Plain, arg) ->
       compose_module (fmt_module_type c (sub_mty ~ctx arg)) ~f:Fn.id
+  | Pfunctorty_unnamed (Template, arg) -> (
+        match macocaml_short_template_domain c arg with
+    | Some lid ->
+                let rec left_edge ({txt; loc} : Longident.t loc) =
+          loc :: (match txt with Ldot (p, _) -> left_edge p | _ -> [])
+        in
+        hvbox 0
+          ( list (arg.pmty_loc :: left_edge lid) noop (Cmts.fmt_before c)
+          $ str "$" $ fmt_longident_loc c lid
+          $ Cmts.fmt_after c arg.pmty_loc )
+    | None ->
+        hvbox 0
+          (wrap (str "$(") (str ")")
+             (hovbox 0
+                (compose_module
+                   (fmt_module_type c (sub_mty ~ctx arg))
+                   ~f:Fn.id ) ) ) )
 
 and fmt_module_type c ?(rec_ = false) ({ast= mty; ctx= ctx0} as xmty) =
   let ctx = Mty mty in
@@ -3880,7 +4014,7 @@ and fmt_module_type c ?(rec_ = false) ({ast= mty; ctx= ctx0} as xmty) =
         match ctx0 with
         (* Functor argument might not be boxed. Force a box when using the
            short syntax. *)
-        | Mty {pmty_desc= Pmty_functor (Pfunctorty_unnamed lhs, _); _}
+        | Mty {pmty_desc= Pmty_functor (Pfunctorty_unnamed (_, lhs), _); _}
           when phys_equal lhs mty ->
             (Some (open_hovbox 2), close_box)
         | _ -> (blk.opn, blk.cls)
@@ -4147,7 +4281,7 @@ and fmt_module c ctx ?rec_ ?epi keyword ?(eqty = "=") name xargs xbody xmty
              misaligning the parameter types. *)
           | Pmty_functor
               ( Pfunctorty_unnamed
-                  {pmty_desc= Pmty_with _ | Pmty_functor _; _}
+                  (Plain, {pmty_desc= Pmty_with _ | Pmty_functor _; _})
               , _ ) ->
               break 1 2
           | _ -> str " "
@@ -4162,7 +4296,8 @@ and fmt_module c ctx ?rec_ ?epi keyword ?(eqty = "=") name xargs xbody xmty
   in
   let blk_b = Option.value_map xbody ~default:empty ~f:(fmt_module_expr c) in
   let args_p = Params.Mod.get_args c.conf xargs in
-  let fmt_name_and_mt ~pro ~loc name mt =
+  let fmt_name_and_mt ~pro ~loc ~kind name mt =
+    let opn, cls = functor_param_delims kind in
     let xmt = sub_mty ~ctx mt in
     let blk = fmt_module_type c ?rec_ xmt in
     let align_opn, align_cls =
@@ -4172,26 +4307,28 @@ and fmt_module c ctx ?rec_ ?epi keyword ?(eqty = "=") name xargs xbody xmty
       hovbox 1
         ( pro
         $ Cmts.fmt_before c ~epi:space_break loc
-        $ str "(" $ align_opn $ fmt_str_loc_opt c name $ str " :" )
+        $ str opn $ align_opn $ fmt_str_loc_opt c name $ str " :" )
       $ fmt_or (Option.is_some blk.pro) (str " ") (break 1 2)
-    and epi = str ")" $ Cmts.fmt_after c loc $ align_cls in
+    and epi = str cls $ Cmts.fmt_after c loc $ align_cls in
     compose_module' ~box:false ~pro ~epi blk
   in
   (* Carry the [epi] to be placed in the next argument's box. *)
   let fmt_arg ~pro {loc; txt} =
     let pro = pro $ args_p.arg_psp in
     match txt with
-    | Unit ->
+    | Unit kind ->
+        let opn, cls = functor_param_delims kind in
         ( pro
-          $ Cmts.fmt c loc (wrap (str "(") (str ")") (Cmts.fmt_within c loc))
+          $ Cmts.fmt c loc
+              (wrap (str opn) (str cls) (Cmts.fmt_within c loc))
         , noop )
-    | Named (name, mt) ->
+    | Named (kind, name, mt) ->
         if args_p.dock then
           (* All signatures, put the [epi] into the box of the next arg and
              don't break. *)
-          fmt_name_and_mt ~pro ~loc name mt
+          fmt_name_and_mt ~pro ~loc ~kind name mt
         else
-          let bdy, epi = fmt_name_and_mt ~pro:noop ~loc name mt in
+          let bdy, epi = fmt_name_and_mt ~pro:noop ~loc ~kind name mt in
           let bdy_indent = if args_p.align then 1 else 0 in
           (pro $ hvbox bdy_indent bdy $ epi, noop)
   in
@@ -4204,7 +4341,7 @@ and fmt_module c ctx ?rec_ ?epi keyword ?(eqty = "=") name xargs xbody xmty
   let single_line =
     Option.for_all xbody ~f:(fun x -> Mod.is_simple x.ast)
     && Option.for_all xmty ~f:(fun x -> Mty.is_simple x.ast)
-    && List.for_all xargs ~f:(function {txt= Unit; _} -> true | _ -> false)
+    && List.for_all xargs ~f:(function {txt= Unit _; _} -> true | _ -> false)
   in
   let doc_before, doc_after, attrs_before, attrs_after =
     fmt_docstring_around_item_attrs c ~force_before:(not single_line)
@@ -4368,7 +4505,9 @@ and fmt_with_constraint c ctx ~pro = function
       $ fmt_module c ctx ~eqty:":=" (str "module type") m1 [] None
           ~rec_flag:false m2 ~attrs:Ast_helper.Attr.empty_ext_attrs
 
-and fmt_mod_apply c ctx loc attrs ~parens ~dock_struct me_f arg =
+and fmt_mod_apply c ctx loc attrs ~parens ~dock_struct ~kind me_f arg =
+  let lparen, rparen = functor_param_delims kind in
+    let arg_blank = match kind with Plain -> 1 | Template -> 0 in
   match me_f.pmod_desc with
   | Pmod_ident _ -> (
     match arg with
@@ -4380,7 +4519,7 @@ and fmt_mod_apply c ctx loc attrs ~parens ~dock_struct me_f arg =
                   ( compose_module
                       (fmt_module_expr c (sub_mod ~ctx me_f))
                       ~f:Fn.id
-                  $ break 1 0 $ x )
+                  $ break arg_blank 0 $ x )
               $ fmt_attributes_and_docstrings c attrs ) }
     | `Block (blk_a, arg_is_simple) ->
         let ocp_indent_compat blk =
@@ -4401,11 +4540,11 @@ and fmt_mod_apply c ctx loc attrs ~parens ~dock_struct me_f arg =
             && not arg_is_simple
           in
           compose_module (fmt_module_expr c (sub_mod ~ctx me_f)) ~f:Fn.id
-          $ break (if break_struct then 1000 else 1) 0
-          $ str "("
+          $ break (if break_struct then 1000 else arg_blank) 0
+          $ str lparen
         in
         let epi =
-          fmt_opt blk_a.epi $ str ")"
+          fmt_opt blk_a.epi $ str rparen
           $ fmt_attributes_and_docstrings c attrs
           $ Cmts.fmt_after c loc
         in
@@ -4433,12 +4572,12 @@ and fmt_mod_apply c ctx loc attrs ~parens ~dock_struct me_f arg =
             ( Cmts.fmt_before c loc
             $ wrap_if parens (str "(") (str ")")
                 (fmt_opt blk_f.pro $ blk_f.psp $ blk_f.bdy $ blk_f.esp)
-            $ fmt_opt blk_f.epi $ break 1 0
+            $ fmt_opt blk_f.epi $ break arg_blank 0
             $
             match arg with
             | `Unit x -> x
             | `Block (x, _) ->
-                wrap (str "(") (str ")") (compose_module x ~f:Fn.id) )
+                wrap (str lparen) (str rparen) (compose_module x ~f:Fn.id) )
       ; cls= close_box $ blk_f.cls
       ; epi=
           Option.some_if has_epi
@@ -4451,15 +4590,16 @@ and fmt_module_expr ?(dock_struct = true) c ({ast= m; ctx= ctx0} as xmod) =
   @@ fun c ->
   let parens = parenze_mod xmod in
   match pmod_desc with
-  | Pmod_apply_unit (me, loc) ->
+  | Pmod_apply_unit (kind, me, loc) ->
+      let opn, cls = functor_param_delims kind in
       let arg =
         Cmts.fmt c loc @@ hvbox 0
-        @@ wrap (str "(") (str ")")
+        @@ wrap (str opn) (str cls)
         @@ Cmts.fmt_within c loc
       in
-      fmt_mod_apply c ctx ~parens ~dock_struct pmod_loc pmod_attributes me
-        (`Unit arg)
-  | Pmod_apply (me_f, me_a) ->
+      fmt_mod_apply c ctx ~parens ~dock_struct ~kind pmod_loc pmod_attributes
+        me (`Unit arg)
+  | Pmod_apply (kind, me_f, me_a) ->
       let dock_struct =
         match me_f.pmod_desc with
         | Pmod_apply _ -> false
@@ -4467,16 +4607,15 @@ and fmt_module_expr ?(dock_struct = true) c ({ast= m; ctx= ctx0} as xmod) =
         | _ -> true
       in
       let blk_a = fmt_module_expr c (sub_mod ~ctx me_a) in
-      fmt_mod_apply c ctx ~parens ~dock_struct pmod_loc pmod_attributes me_f
+      fmt_mod_apply c ctx ~parens ~dock_struct ~kind pmod_loc pmod_attributes
+        me_f
         (`Block (blk_a, Mod.is_simple me_a))
   | Pmod_constraint (me, mt) ->
       let parens =
         match ctx0 with
-        | Mod {pmod_desc= Pmod_apply (f, _args); _} when not (phys_equal f m)
-          ->
-            (* Pmod_apply arguments always have parens around them, no need
-               to add extra. That's not the case for the applied functor. *)
-            false
+        | Mod {pmod_desc= Pmod_apply (Plain, f, _args); _}
+          when not (phys_equal f m) ->
+                        false
         | _ -> true
       in
       let blk_e = fmt_module_expr c (sub_mod ~ctx me) in
@@ -4711,7 +4850,14 @@ and fmt_structure_item' ~ctx0 c ~last:last_item ~semisemi ~pro ?epi ~ctx si =
         sub_mb
   | Pstr_type (rec_flag, decls) -> fmt_type c ~pro ?epi rec_flag decls ctx
   | Pstr_typext te -> fmt_type_extension c ctx ~pro ?epi te
-  | Pstr_value {pvbs_rec= rec_flag; pvbs_bindings= bindings} ->
+  | Pstr_value
+      {pvbs_rec= rec_flag; pvbs_bindings= bindings; pvbs_macro= macro} ->
+      let keyword =
+        match macro with
+        | Value -> "let"
+        | Static -> "$let"
+        | Macro -> "$let[..]"
+      in
       let update_config c i =
         update_config ~quiet:true c
           (i.pvb_attributes.attrs_before @ i.pvb_attributes.attrs_after)
@@ -4721,7 +4867,8 @@ and fmt_structure_item' ~ctx0 c ~last:last_item ~semisemi ~pro ?epi ~ctx si =
         let first = Option.is_none prev in
         let last = Option.is_none next in
         let b =
-          Sugar.Let_binding.of_let_binding ~ctx ~first ~cmts:c.cmts b
+          Sugar.Let_binding.of_let_binding ~keyword ~ctx ~first ~cmts:c.cmts
+            b
         in
         let closing =
           match c.conf.fmt_opts.let_binding_spacing.v with

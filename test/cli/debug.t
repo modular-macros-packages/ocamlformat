@@ -14,7 +14,7 @@
       structure_item (a.ml[2,34+0]..[4,59+7])
       comments
         before: (* Intentionally not formatted *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,34+0]..[4,59+7])
           comments
@@ -46,7 +46,7 @@
       structure_item (a.ml[2,34+0]..[4,59+7])
       comments
         before: (* Intentionally not formatted *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,34+0]..[4,59+7])
           comments
@@ -78,7 +78,7 @@
       structure_item (a.ml[2,34+0]..[2,34+26])
       comments
         before: (* Intentionally not formatted *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,34+0]..[2,34+26])
           comments
@@ -109,7 +109,7 @@
       structure_item (a.ml[2,34+0]..[2,34+26])
       comments
         before: (* Intentionally not formatted *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,34+0]..[2,34+26])
           comments
@@ -155,7 +155,7 @@
       comments
         before: (* before let-binding *)
          after: (* after let-binding *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,25+0]..[6,233+3])
           comments
@@ -217,7 +217,7 @@
       comments
         before: (* before let-binding *)
          after: (* after let-binding *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,25+0]..[6,233+3])
           comments
@@ -279,7 +279,7 @@
       comments
         before: (* before let-binding *)
          after: (* after let-binding *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,25+0]..[13,265+3])
           comments
@@ -340,7 +340,7 @@
       comments
         before: (* before let-binding *)
          after: (* after let-binding *)
-        Pstr_value Nonrec
+        Pstr_value Nonrec Value
         [
           <def> (a.ml[2,25+0]..[13,265+3])
           comments

@@ -437,6 +437,8 @@ and expression_desc =
   | Pexp_extension of extension  (** [[%id]] *)
   | Pexp_unreachable  (** [.] *)
   | Pexp_hole  (** [_] *)
+  | Pexp_quote of expression  (** [<< E >>] *)
+  | Pexp_splice of expression  (** [$(E)], [$x], [$M.x] *)
 
 and case =
     {
@@ -528,6 +530,7 @@ and value_description =
      pval_name: string loc;
      pval_type: core_type;
      pval_prim: string list;
+     pval_macro: macro_flag;
      pval_attributes: attributes;  (** [... [\@\@id1] [\@\@id2]] *)
      pval_loc: Location.t;
     }
@@ -654,6 +657,8 @@ and extension_constructor =
     {
      pext_name: string loc;
      pext_kind: extension_constructor_kind;
+     pext_static: bool;
+       (** Whether the constructor is a compile-time one, declared [$C] *)
      pext_loc: Location.t;
      pext_attributes: attributes;  (** [C of ... [\@id1] [\@id2]] *)
    }
@@ -895,8 +900,14 @@ and module_type =
 and module_type_desc =
   | Pmty_ident of Longident.t loc  (** [Pmty_ident(S)] represents [S] *)
   | Pmty_signature of signature  (** [sig ... end] *)
-  | Pmty_functor of functor_parameter * module_type
-      (** [functor(X : MT1) -> MT2] *)
+  | Pmty_functor of functor_kind * functor_parameter * module_type
+      (** [functor(X : MT1) -> MT2] when the kind is [Plain],
+          [$(X : MT1) -> MT2] when the kind is [Template].
+
+          A parameter that is not named is written [MT1 -> MT2] in a
+          functor type, and [$(MT1) -> MT2] in a template type, or
+          [$S -> MT2] when [MT1] is the name [S], capitalised or
+          not. *)
   | Pmty_with of module_type * with_constraint list  (** [MT with ...] *)
   | Pmty_typeof of module_expr  (** [module type of ME] *)
   | Pmty_extension of extension  (** [[%id]] *)
@@ -1044,10 +1055,15 @@ and module_expr =
 and module_expr_desc =
   | Pmod_ident of Longident.t loc  (** [X] *)
   | Pmod_structure of structure  (** [struct ... end] *)
-  | Pmod_functor of functor_parameter * module_expr
-      (** [functor(X : MT1) -> ME] *)
-  | Pmod_apply of module_expr * module_expr (** [ME1(ME2)] *)
-  | Pmod_apply_unit of module_expr (** [ME1()] *)
+  | Pmod_functor of functor_kind * functor_parameter * module_expr
+      (** [functor(X : MT1) -> ME] when the kind is [Plain],
+          [functor $(X : MT1) -> ME] when the kind is [Template] *)
+  | Pmod_apply of functor_kind * module_expr * module_expr
+      (** [ME1(ME2)] when the kind is [Plain], [ME1$(ME2)] when it is
+          [Template] *)
+  | Pmod_apply_unit of functor_kind * module_expr
+      (** [ME1()] when the kind is [Plain], [ME1$()] when it is
+          [Template] *)
   | Pmod_constraint of module_expr * module_type  (** [(ME : MT)] *)
   | Pmod_unpack of expression  (** [(val E)] *)
   | Pmod_extension of extension  (** [[%id]] *)
@@ -1063,7 +1079,7 @@ and structure_item =
 
 and structure_item_desc =
   | Pstr_eval of expression * attributes  (** [E] *)
-  | Pstr_value of rec_flag * value_binding list
+  | Pstr_value of rec_flag * macro_flag * value_binding list
       (** [Pstr_value(rec, [(P1, E1 ; ... ; (Pn, En))])] represents:
             - [let P1 = E1 and ... and Pn = EN]
                 when [rec] is {{!Asttypes.rec_flag.Nonrecursive}[Nonrecursive]},

@@ -31,6 +31,10 @@ type constant =
 
 type rec_flag = Nonrecursive | Recursive
 
+type macro_flag = Macro | Value | Static
+
+type functor_kind = Longident.functor_kind = Template | Plain
+
 type direction_flag = Upto | Downto
 
 (* Order matters, used in polymorphic comparison *)

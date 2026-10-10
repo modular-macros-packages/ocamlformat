@@ -488,6 +488,8 @@ and expression_desc =
   | Pexp_extension of extension  (** [[%id]] *)
   | Pexp_unreachable  (** [.] *)
   | Pexp_hole  (** [_] *)
+  | Pexp_quote of expression  (** [<< E >>] *)
+  | Pexp_splice of expression  (** [$(E)], [$x], [$M.x] *)
   | Pexp_beginend of expression * infix_ext_attrs (** [begin E end] *)
   | Pexp_parens of expression  (** [(E)] *)
   | Pexp_cons of expression list  (** [E1 :: ... :: En] *)
@@ -622,6 +624,9 @@ and value_description =
      pval_name: string loc;
      pval_type: core_type;
      pval_prim: string loc list;
+     pval_macro: macro_flag;
+       (** MacoCaml: [Value] for [val], [Static] for [$val], [Macro] for
+           [$val[..]]. *)
      pval_attributes: ext_attrs;  (** [... [\@\@id1] [\@\@id2]] *)
      pval_loc: Location.t;
     }
@@ -747,7 +752,14 @@ and type_extension =
 and extension_constructor =
     {
      pext_name: string loc;
+       (** For a constructor declared [$C] the location covers the [$]. *)
      pext_kind: extension_constructor_kind;
+     pext_static: bool;
+       (** MacoCaml: [true] for a compile-time constructor, declared [$C]
+           ([exception $C ...], [type t += $C ...], [exception $C = D]);
+           [false] for a run-time one.  The standard parser has the same
+           field, as the fork does (since fork 36beda77cd; until then the
+           mark was the attribute [[\@ocaml.static]]). *)
      pext_loc: Location.t;
      pext_attributes: attributes;  (** [C of ... [\@id1] [\@id2]] *)
    }
@@ -991,19 +1003,28 @@ and module_type_desc =
   | Pmty_alias of Longident.t loc  (** [(module M)] *)
 
 and functor_parameter =
-  | Unit  (** [()] *)
-  | Named of string option loc * module_type
-      (** [Named(name, MT)] represents:
+  | Unit of functor_kind
+      (** [()] when the kind is [Plain], [$()] when it is [Template] *)
+  | Named of functor_kind * string option loc * module_type
+      (** [Named(kind, name, MT)] represents, for [Plain]:
             - [(X : MT)] when [name] is [Some X],
-            - [(_ : MT)] when [name] is [None] *)
+            - [(_ : MT)] when [name] is [None]
+          and for [Template]:
+            - [$(X : MT)] when [name] is [Some X],
+            - [$(_ : MT)] when [name] is [None] *)
 
 and functor_parameters_type =
   | Pfunctorty_short of functor_parameter loc list
-      (** [(A : T) (_ : T) ... ->]. *)
+      (** [(A : T) (_ : T) ... ->].  The parameters may be of either kind,
+          as in [$(A : T) (B : T) ->]. *)
   | Pfunctorty_keyword of attributes * functor_parameter loc list
-      (** [functor (A : T) (_ : T) ... ->]. *)
-  | Pfunctorty_unnamed of module_type
-      (** [T ->]. *)
+      (** [functor (A : T) (_ : T) ... ->], parameters of either kind. *)
+  | Pfunctorty_unnamed of functor_kind * module_type
+      (** [T ->] when the kind is [Plain], [$(T) ->] when it is
+          [Template], or [$S ->] when [T] is the name [S], capitalised or
+          not (the name may be qualified, [$M.S ->], [$M.s ->], but not an
+          application).  Both spellings of a template give the same node;
+          the printer chooses. *)
 
 and signature = signature_item list
 
@@ -1143,9 +1164,12 @@ and module_expr_desc =
   | Pmod_structure of structure  (** [struct ... end] *)
   | Pmod_functor of functor_parameter loc list * module_expr
       (** [functor (X1 : MT1) ... (Xn : MTn) -> ME] *)
-  | Pmod_apply of module_expr * module_expr  (** [ME1(ME2)] *)
-  | Pmod_apply_unit of module_expr * Location.t
-      (** [ME1()]. The location argument correspond to the [()]. *)
+  | Pmod_apply of functor_kind * module_expr * module_expr
+      (** [ME1(ME2)] when the kind is [Plain], [ME1$(ME2)] when it is
+          [Template] *)
+  | Pmod_apply_unit of functor_kind * module_expr * Location.t
+      (** [ME1()] when the kind is [Plain], [ME1$()] when it is [Template].
+          The location argument corresponds to the [()] / [$()]. *)
   | Pmod_constraint of module_expr * module_type  (** [(ME : MT)] *)
   | Pmod_unpack of expression * package_type option * package_type option
       (** [(val E : M1 :> M2)] *)
@@ -1222,6 +1246,9 @@ and value_bindings =
   {
     pvbs_bindings: value_binding list;
     pvbs_rec: rec_flag;
+    pvbs_macro: macro_flag;
+      (** MacoCaml: [Value] for [let], [Static] for [$let], [Macro] for
+          [$let[..]].  Only [Value] can occur in [Pexp_let] / [Pcl_let]. *)
   }
 
 and module_binding =

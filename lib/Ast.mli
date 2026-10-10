@@ -61,6 +61,12 @@ module Exp : sig
   val exposed_left : expression -> bool
   (** [exposed_left exp] holds if the left-most subexpression of [exp] is a
       prefix operators. *)
+
+  val exposed_left_macocaml : expression -> bool
+  (** [exposed_left_macocaml exp] holds if the left-most token of [exp] is a
+      MacoCaml quotation ([<< .. >>]) or splice ([$..]), both of which begin
+      with an operator character and so must not be glued to a preceding
+      prefix operator. *)
 end
 
 val doc_atrs :

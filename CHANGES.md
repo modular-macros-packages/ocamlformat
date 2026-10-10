@@ -4,6 +4,96 @@ Items marked with an asterisk (\*) are changes that are likely to format
 existing code differently from the previous release when using the default
 profile. This started with version 0.26.0.
 
+## unreleased
+
+### Highlight
+
+- Support MacoCaml syntax
+  This branch (`macocaml-port`) parses and prints the syntax of the MacoCaml
+  fork of OCaml on top of stock OCaml 5.5 syntax.  ocamlformat itself is
+  still built by a stock compiler; it only has to *parse* MacoCaml.  The
+  constructs are:
+  ```ocaml
+  << e >>                     (* a quotation *)
+  $(e)   $x   $M.x            (* a splice, in its three spellings *)
+  $let x = e   $let rec ...   (* a static binding *)
+  $let[..] f x = e            (* a generator (macro) binding *)
+  $val x : t   $val[..] f : t (* static and generator value descriptions *)
+  module F $(X : S) = ...     (* a template functor *)
+  module G $() = ...          (* ... with a unit parameter *)
+  module A = F$(M)            (* a template functor application *)
+  module type T = $(X : S) -> S (* a template functor type *)
+  type u = F$(M).t            (* a template application in a path *)
+  exception $E of int         (* a compile-time exception *)
+  type t += $A | $B = M.C     (* compile-time extension constructors *)
+  ```
+  A quotation always keeps a blank inside its delimiters, a splice never has
+  one after its `$`, and a `$let` / `$let[..]` item lays out exactly like
+  the `let` it mirrors, under every profile.  `$(x)` is shortened to `$x`
+  unless a comment would be dropped with the parentheses.
+
+  A dollar glued to a keyword other than `let` and `val`, or to `_`, is a
+  lexical error (MacoCaml b46ccc6dde): `$if`, `$in` and `$_` are refused,
+  with the compiler's message and its hint, `$\#if`.  A dollar glued to a
+  raw identifier splices the variable that it names, so a variable named by
+  a keyword is spliced `$\#if`, or `$(\#if)`; both are printed `$(\#if)`, as
+  the compiler prints them, for no dollar is printed glued to an escape:
+  `$\#foo` is printed `$(\#foo)`, and a template type's domain `$\#in -> S`
+  is printed `$(\#in) -> S`.  `$\#M` is refused, as any capitalised raw
+  identifier is.  `f $\#if` now applies `f` to a splice, where it was the
+  operator `$`.
+
+  Generators are bound with `$let[..]` and declared with `$val[..]`
+  (MacoCaml 405e774be8, in place of `$gen`).  The mark `[..]` is one token;
+  it may follow the keyword with a blank, and is printed glued, as the
+  compiler prints it: `$let[..] rec f x = ...`, `$let[..]%ext f x = ...`.
+  `$gen` is no longer a keyword but the splice of `gen`, so `$(gen)` is
+  now shortened to `$gen` like any other splice of an identifier.
+
+  Templates are written with a dollar (MacoCaml 84ae5f327d; the square
+  brackets of earlier versions, `[X : S]`, `F[M]` and the arrow-less
+  `[X : S] S`, are syntax errors).  A template's parameter or argument opens
+  with `$(`, the token that opens a splice: `module F $(X : S) = ...`,
+  `functor $(X : S) -> ...`, `F$(M)`, `F$()`.  A template functor type takes
+  an arrow, `$(X : S) -> S`, and one arrow may follow several parameters of
+  either kind, `$(X : A) (Y : B) $() -> C`; `$(S) -> S` has an unnamed
+  parameter, and is printed `$S -> S` when its type is a name, possibly
+  qualified, capitalised or not (`$M.S -> S`, `$s -> S`, `$M.s -> S`,
+  MacoCaml 74404c0922 and 21a7f8b5c6), as the compiler prints it and as
+  `(S) -> S` is printed `S -> S`.  Any other domain keeps its parentheses,
+  `$(S with type t = int) -> S`, `$(F$(M).S) -> S`, and so does a name with
+  an attribute or with a comment written inside the parentheses, and a
+  keyword used as a name, which is written with an escape, unless it is
+  qualified: `$(\#let) -> S`, but `$M.\#val -> S`.  A signature declaration keeps the sugar without an arrow,
+  `module F $(X : S) : S`.  As the compiler prints them, an application is
+  glued, `F$(M)`, `F$(M)$(N)`, `F (M)$(N)` (a blank before the dollar is
+  accepted and dropped), while a definition keeps its blank.  The dollar is
+  an operator character, so it is never printed right after another one:
+  `= $(X : S) -> S`, `-> $(X : S) -> S`.
+
+  Templates are applicative (MacoCaml 52fd306303), so a template application
+  may appear in a path -- `F$(M).t`, `F$(M).S`, `F$(M)(N).t`, `open F$(M)` in
+  a signature -- wherever `F(M)` may.  `Longident.Lapply` carries the kind of
+  its application, as in the fork, and a template path is printed `F$(M)`,
+  laid out exactly like `F(M)`: no blank before the dollar.
+
+  An extension constructor declared with a dollar -- `exception $E`,
+  `exception $E of t`, `exception $F = M.E`, `type t += $A`,
+  `type t += $B = C`, and the local `let exception $E in ...` -- is a
+  compile-time constructor (MacoCaml f5c4da5973).  The dollar is printed
+  glued to the name, inside the name's comments, and everything else --
+  attributes, docstrings, comments, line breaks -- is laid out exactly as
+  for the unmarked constructor.  Uses carry no dollar, and ordinary variant
+  constructors cannot be marked.  As in the fork's syntax tree (MacoCaml
+  36beda77cd), the mark is a field of the constructor, `pext_static`, in
+  both of ocamlformat's trees; the standard one used the fork's earlier
+  attribute `[@ocaml.static]`, so the check that formatting preserves the
+  AST now tells `exception $E` from `exception E [@ocaml.static]`, which is
+  an ordinary attribute and is printed as written.
+
+  Regression tests live in `test/passing/tests/macocaml_*.ml{,i}`, with
+  reference outputs for all four profiles.
+
 ## 0.29.0
 
 ### Highlight

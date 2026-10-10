@@ -62,7 +62,7 @@ let longident_is_simple c x =
     match x with
     | Longident.Lident x -> String.length x
     | Ldot (x, y) -> length x.txt + 1 + String.length y.txt
-    | Lapply (x, y) -> length x.txt + length y.txt + 3
+    | Lapply (_, x, y) -> length x.txt + length y.txt + 3
   in
   longident_fit_margin c (length x)
 
@@ -180,8 +180,23 @@ module Exp = struct
   let rec exposed_left e =
     match e.pexp_desc with
     | Pexp_prefix _ -> true
+        | Pexp_quote _ | Pexp_splice _ -> true
     | Pexp_apply (op, _) -> exposed_left op
     | Pexp_field (e, _) -> exposed_left e
+    | _ -> false
+
+    let rec exposed_left_macocaml e =
+    match e.pexp_desc with
+    | Pexp_quote _ | Pexp_splice _ -> true
+    | Pexp_apply (e, _)
+     |Pexp_field (e, _)
+     |Pexp_send (e, _)
+     |Pexp_setfield (e, _, _)
+     |Pexp_infix (_, e, _)
+     |Pexp_sequence (e, _, _)
+     |Pexp_indexop_access {pia_lhs= e; _} ->
+        exposed_left_macocaml e
+    | Pexp_cons (e :: _) -> exposed_left_macocaml e
     | _ -> false
 
   (** [mem_cls cls exp] holds if [exp] is in the named class of expressions
@@ -285,8 +300,8 @@ and mod_is_simple x =
   | Pmod_ident _ | Pmod_unpack _ | Pmod_structure [] | Pmod_hole -> true
   | Pmod_structure (_ :: _) | Pmod_extension _ | Pmod_functor (_, _) -> false
   | Pmod_constraint (e, t) -> mod_is_simple e && mty_is_simple t
-  | Pmod_apply (a, b) -> mod_is_simple a && mod_is_simple b
-  | Pmod_apply_unit (a, _) -> mod_is_simple a
+  | Pmod_apply (_, a, b) -> mod_is_simple a && mod_is_simple b
+  | Pmod_apply_unit (_, a, _) -> mod_is_simple a
 
 module Mty = struct
   let is_simple = mty_is_simple
@@ -380,8 +395,9 @@ module Structure_item = struct
       | Pstr_include {pincl_mod= me; _} | Pstr_module {pmb_expr= me; _} ->
           let rec is_simple_mod me =
             match me.pmod_desc with
-            | Pmod_apply (me1, me2) -> is_simple_mod me1 && is_simple_mod me2
-            | Pmod_functor (_, me) | Pmod_apply_unit (me, _) ->
+            | Pmod_apply (_, me1, me2) ->
+                is_simple_mod me1 && is_simple_mod me2
+            | Pmod_functor (_, me) | Pmod_apply_unit (_, me, _) ->
                 is_simple_mod me
             | Pmod_ident i -> longident_is_simple c i.txt
             | _ -> false
@@ -1292,7 +1308,7 @@ end = struct
        |Pexp_tuple _ | Pexp_unreachable | Pexp_variant _ | Pexp_while _
        |Pexp_hole | Pexp_beginend _ | Pexp_parens _ | Pexp_cons _
        |Pexp_indexop_access _ | Pexp_prefix _ | Pexp_infix _
-       |Pexp_construct_unit_beginend _ ->
+       |Pexp_construct_unit_beginend _ | Pexp_quote _ | Pexp_splice _ ->
           assert false
       | Pexp_extension (_, ext) -> assert (check_extensions ext)
       | Pexp_object ({pcstr_self; _}, _) ->
@@ -1399,6 +1415,7 @@ end = struct
         | Pexp_constant _ | Pexp_ident _ | Pexp_new _ | Pexp_pack _
          |Pexp_unreachable | Pexp_hole | Pexp_construct_unit_beginend _ ->
             assert false
+        | Pexp_quote e | Pexp_splice e -> assert (e == exp)
         | Pexp_object _ -> assert false
         | Pexp_let ({pvbs_bindings; _}, e, _) ->
             assert (
@@ -1931,7 +1948,7 @@ end = struct
     ||
     match (ctx, mty.pmty_desc) with
     | Mty {pmty_desc= Pmty_with _; _}, (Pmty_with _ | Pmty_functor _) -> true
-    | ( Mty {pmty_desc= Pmty_functor (Pfunctorty_unnamed lhs, _); _}
+        | ( Mty {pmty_desc= Pmty_functor (Pfunctorty_unnamed (Plain, lhs), _); _}
       , (Pmty_with _ | Pmty_functor _) )
       when lhs == mty ->
         true
@@ -1943,8 +1960,7 @@ end = struct
     Mod.has_trailing_attributes m
     ||
     match (ctx, m.pmod_desc) with
-    (* The RHS of an application is always parenthesized already. *)
-    | Mod {pmod_desc= Pmod_apply (_, x); _}, Pmod_functor _ when m == x ->
+        | Mod {pmod_desc= Pmod_apply (_, _, x); _}, Pmod_functor _ when m == x ->
         false
     | Mod {pmod_desc= Pmod_apply _ | Pmod_apply_unit _; _}, Pmod_functor _ ->
         true
@@ -2162,7 +2178,8 @@ end = struct
          |Pexp_record _ | Pexp_send _ | Pexp_unreachable
          |Pexp_variant (_, None)
          |Pexp_hole | Pexp_while _ | Pexp_beginend _ | Pexp_parens _
-         |Pexp_indexop_access _ | Pexp_construct_unit_beginend _ ->
+         |Pexp_indexop_access _ | Pexp_construct_unit_beginend _
+         |Pexp_quote _ | Pexp_splice _ ->
             false
       in
       Exp.mem_cls cls exp
@@ -2240,7 +2257,7 @@ end = struct
        |Pexp_record _ | Pexp_send _ | Pexp_unreachable
        |Pexp_variant (_, None)
        |Pexp_hole | Pexp_while _ | Pexp_beginend _ | Pexp_parens _
-       |Pexp_construct_unit_beginend _ ->
+       |Pexp_construct_unit_beginend _ | Pexp_quote _ | Pexp_splice _ ->
           false
     in
     Hashtbl.find_or_add marked_parenzed_inner_nested_match exp

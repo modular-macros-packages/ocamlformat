@@ -1,0 +1,68 @@
+(** Template functors in a signature. *)
+
+module type S = sig
+  type t
+
+  $val v : int
+end
+
+(** A template functor declaration: its type takes an arrow. *)
+module F : $(X : S) -> sig
+  $val s : int
+
+  val a : int
+end
+
+module Unit_param : $() -> sig
+  val a : int
+end
+
+module Anonymous : $(_ : S) -> S
+
+module Unnamed : $S -> S
+
+module Short : $S -> $M.S -> $(S with type t = int) -> S
+
+module Lowercase : $s -> $M.s -> $(\#let) -> $M.\#val -> S
+
+module Nested : $(X : S) -> $(Y : S) -> S
+
+module Template_first : $(X : S) -> (Y : S) -> S
+
+module One_arrow : $(X : S) (Y : S) $() -> S
+
+module Plain_first : (Y : S) -> $(X : S) -> S
+
+(** The same thing written as a module type. *)
+module type T_template = $(X : S) -> sig
+  val a : int
+end
+
+module type T_unit = $() -> S
+
+(** Template parameters on a module declaration inside a signature: the
+    sugar takes no arrow. *)
+module type T = sig
+  module F $(X : S) : S
+
+  module G $() : S
+
+  module H (X : S) $(Y : S) : S
+end
+
+module rec M : sig
+  module F : $(X : S) -> sig
+    val w : int
+  end
+
+  val k : int
+end
+
+module A_template_functor_declaration_with_many_parameters : $(Alpha : S)
+  -> $(Beta : S)
+  -> $(Gamma : S)
+  -> $(Delta : S)
+  -> $(Epsilon : S)
+  -> sig
+  val a : int
+end

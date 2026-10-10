@@ -23,10 +23,17 @@
 
 *)
 
+(** MacoCaml: the kind of a functor application in a path.  The fork's
+    [Longident.Lapply] takes [Asttypes.functor_kind]; the type is defined
+    here because this library cannot see the parsers' [Asttypes], each of
+    which re-exports it. *)
+type functor_kind = Template | Plain
+
 type t =
     Lident of string
   | Ldot of t Location.loc * string Location.loc
-  | Lapply of t Location.loc * t Location.loc
+  | Lapply of functor_kind * t Location.loc * t Location.loc
+      (** [F(M)], or [F$(M)] for a template *)
 
 (** [same t t'] compares the longidents [t] and [t'] without taking locations
     into account. *)

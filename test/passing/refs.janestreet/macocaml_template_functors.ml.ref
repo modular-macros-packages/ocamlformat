@@ -1,0 +1,214 @@
+(* MacoCaml template functors: a parameter or an argument opens with a
+   dollar, $(X : S) and F$(M), and a template functor type takes an arrow,
+   $(X : S) -> S, as a plain functor type does. *)
+
+module type S = sig
+  type t
+
+  val v : t
+end
+
+(* Definitions. *)
+
+module F $(X : S) = struct
+  type t = X.t
+
+  let v = X.v
+end
+
+module Unit_param $() = struct
+  let v = 0
+end
+
+module Anonymous $(_ : S) = struct
+  let v = 0
+end
+
+module Template_first $(X : S) (Y : S) = struct
+  type t = X.t * Y.t
+end
+
+module Plain_first (X : S) $(Y : S) = struct
+  type t = X.t * Y.t
+end
+
+module Mixed $(X : S) (Y : S) $() () = struct
+  type t = X.t * Y.t
+end
+
+module Literal =
+functor
+  $(X : S)
+  ->
+  struct
+    let v = X.v
+  end
+
+module Ascribed : $(X : S) -> S =
+functor
+  $(X : S)
+  ->
+  struct
+    type t = X.t
+
+    let v = X.v
+  end
+
+(* A parameter list long enough to break. *)
+
+module A_template_functor_with_many_parameters
+    $(Alpha : S)
+    $(Beta : S)
+    $(Gamma : S)
+    $(Delta : S)
+    $(Epsilon : S) =
+struct
+  let v = 0
+end
+
+(* Applications: $( ) already delimits the argument, which is glued to the
+   template, as the compiler prints it.  A blank before the dollar is
+   accepted, and dropped. *)
+
+module A = F$(B)
+module A_spaced = F$(B)
+module A_unit = Unit_param$()
+module A_constrained = F$((B : S))
+
+module A_struct = F$(struct
+    type t = int
+
+    let v = 0
+  end)
+
+module A_nested = F$(F$(B))
+module A_curried = Mixed$(B) (C)$() ()
+module A_curried_glued = Mixed$(B) (C)$() ()
+module A_plain_then_template = G (B)$(C)
+module A_template_then_template = H$(B)$(C)
+
+module A_functor =
+  F
+    $(functor
+        (X : S)
+        ->
+        struct
+          let v = X.v
+        end)
+
+(* An application too long for a line breaks before each argument, plain
+   or template. *)
+
+module A_long =
+  A_template_with_a_rather_long_name$(An_argument_with_a_long_name) (Another_argument)
+    $(And_a_third_argument)
+
+module A_path = Lib.F$(B)
+include F$(B)
+include Unit_param$()
+
+(* Template functor types take an arrow, as plain functor types do. *)
+
+module type T_template = $(X : S) -> sig
+  val v : X.t
+end
+
+module type T_unit = $() -> sig
+  val v : int
+end
+
+(* A parameter that is not named: $(S) -> S, or $(_ : S) -> S.  When its
+   type is a name, possibly qualified, capitalised or not, the short form
+   $S -> S is printed, as the compiler prints it; $(_ : S) is kept as
+   written, as (_ : S) is. *)
+
+module type T_unnamed = $S -> S
+module type T_short = $S -> S
+module type T_short_qualified = $M.S -> $M.N.S -> S
+module type T_underscore = $(_ : S) -> S
+module type T_unnamed_nested = $($S -> S) -> S
+module type T_short_nested = $($S -> S) -> $S -> S
+module type T_lowercase = $s -> $M.s -> $s -> $M.s -> S
+
+(* A keyword used as a name is written with an escape.  The compiler does
+   not glue a dollar to an escape, though $\#let lexes since fork b46ccc6dde,
+   and nor does ocamlformat: the name keeps its parentheses unless it is
+   qualified. *)
+
+module type T_escaped = $(\#let) -> $M.\#val -> $M.\#val -> S
+
+(* Any other domain keeps its parentheses: a module type that is not a name,
+   an application path, and a name with an attribute. *)
+
+module type T_not_a_name = $(S with type t = int) -> $(sig end) -> S
+module type T_application = $(F$(M).S) -> $(G(M).s) -> S
+module type T_attribute = $(S [@attr]) -> $(s [@attr]) -> S
+
+(* A comment written between the parentheses keeps them; a name spelt short
+   keeps its comments where they are. *)
+
+module type T_comment_inside = $((* before *) S) -> $(S (* after *)) -> S
+module type T_comment_short = $M (* one *).(* two *) S (* three *) -> S
+
+(* A domain that is itself a template type, or a plain one. *)
+
+module type T_short_domain_plain = ($S -> S) -> S
+module type T_nested = $(X : S) -> $(Y : S) -> S
+module type T_mixed = $(X : S) -> (Y : S) -> S
+
+(* One arrow may follow several parameters, of either kind. *)
+
+module type T_one_arrow = $(X : S) (Y : S) $() () -> S
+module type T_keyword = functor $(X : S) (Y : S) -> S
+
+module type T_many_parameters = $(Alpha : S)
+    (Beta : S)
+    $(Gamma : S)
+    $(Delta : S)
+    (Epsilon : S)
+    -> sig
+  val v : int
+end
+
+module type T_plain_first = (Y : S) -> $(X : S) -> S
+
+(* The body reaches as far right as it can: this is [$S -> (S -> S)]. *)
+
+module type T_body_extends = $S -> S -> S
+module type T_short_body_extends = $S -> S with type t = int
+
+(* [>)] is not a token: an object type may close a parameter's type with no
+   blank before the parenthesis. *)
+
+module type T_object = $(X : S with type t = < a : int >) -> S
+
+module Object $(X : S with type t = < a : int >) = struct
+  let v = 0
+end
+
+(* The dollar is an operator character, and one before it would join it:
+   after [=], [->] or [:] the opening is always printed with a blank. *)
+
+module type T_after_arrow = (Y : S) -> $(X : S) -> $S -> $() -> S
+module type T_short_after_equal = $S -> $M.S -> S
+
+module type T_with = sig
+    module type M
+  end
+  with
+    module type M = ($(X : S) -> S)
+
+module Ascribed_after_colon : $(X : S) -> S = F
+module Ascribed_short_after_colon : $S -> S = F
+
+(* Comments around template parameters and arguments. *)
+
+module Commented $((* before the name *) X : S) = struct
+  let v = 0
+end
+
+module Commented_arg = F$((* before the argument *) B)
+
+module Commented_unit $( (* nothing here *) ) = struct
+  let v = 0
+end

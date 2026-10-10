@@ -123,7 +123,7 @@ module Let_binding = struct
     ; lb_attrs: ext_attrs
     ; lb_loc: Location.t }
 
-  let of_let_binding ~ctx ~first ~cmts vb =
+  let of_let_binding ?(keyword = "let") ~ctx ~first ~cmts vb =
     if vb.pvb_is_pun then
       (* this is a no-op if it was parsed as a pun, but if
          letop-punning=always was specified this is needed to move comments
@@ -135,7 +135,7 @@ module Let_binding = struct
           | Pfunction_cases (_, l, _) ->
               (* NB: should be impossible for puns *) l )
         ~before:vb.pvb_pat.ppat_loc ~after:vb.pvb_pat.ppat_loc ;
-    { lb_op= Location.{txt= (if first then "let" else "and"); loc= none}
+    { lb_op= Location.{txt= (if first then keyword else "and"); loc= none}
     ; lb_pat= sub_pat ~ctx vb.pvb_pat
     ; lb_args= vb.pvb_args
     ; lb_typ= vb.pvb_constraint
@@ -144,8 +144,8 @@ module Let_binding = struct
     ; lb_attrs= vb.pvb_attributes
     ; lb_loc= vb.pvb_loc }
 
-  let of_let_bindings ~ctx ~cmts =
-    List.mapi ~f:(fun i -> of_let_binding ~ctx ~first:(i = 0) ~cmts)
+  let of_let_bindings ?keyword ~ctx ~cmts =
+    List.mapi ~f:(fun i -> of_let_binding ?keyword ~ctx ~first:(i = 0) ~cmts)
 
   let of_binding_ops ~cmts bos =
     List.map bos ~f:(fun bo ->

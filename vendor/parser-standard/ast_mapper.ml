@@ -110,10 +110,10 @@ let rec map_lid sub lid =
       let lid = map_loc_lid sub lid in
       let id = map_loc map_string sub id in
       Ldot (lid, id)
-  | Lapply (lid, lid') ->
+  | Lapply (kind, lid, lid') ->
     let lid = map_loc_lid sub lid in
     let lid' = map_loc_lid sub lid' in
-    Lapply(lid, lid')
+    Lapply(kind, lid, lid')
 
 and map_loc_lid sub loc_lid =
   map_loc map_lid sub loc_lid
@@ -265,11 +265,12 @@ module T = struct
   let map_extension_constructor sub
       {pext_name;
        pext_kind;
+       pext_static;
        pext_loc;
        pext_attributes} =
     let loc = sub.location sub pext_loc in
     let attrs = sub.attributes sub pext_attributes in
-    Te.constructor ~loc ~attrs
+    Te.constructor ~loc ~attrs ~static:pext_static
       (map_loc map_string sub pext_name)
       (map_extension_constructor_kind sub pext_kind)
 
@@ -336,8 +337,8 @@ module MT = struct
     | Pmty_ident s -> ident ~loc ~attrs (map_loc_lid sub s)
     | Pmty_alias s -> alias ~loc ~attrs (map_loc_lid sub s)
     | Pmty_signature sg -> signature ~loc ~attrs (sub.signature sub sg)
-    | Pmty_functor (param, mt) ->
-        functor_ ~loc ~attrs
+    | Pmty_functor (kind, param, mt) ->
+        functor_ ~loc ~attrs kind
           (map_functor_param sub param)
           (sub.module_type sub mt)
     | Pmty_with (mt, l) ->
@@ -400,14 +401,15 @@ module M = struct
     match desc with
     | Pmod_ident x -> ident ~loc ~attrs (map_loc_lid sub x)
     | Pmod_structure str -> structure ~loc ~attrs (sub.structure sub str)
-    | Pmod_functor (param, body) ->
-        functor_ ~loc ~attrs
+    | Pmod_functor (kind, param, body) ->
+        functor_ ~loc ~attrs kind
           (map_functor_param sub param)
           (sub.module_expr sub body)
-    | Pmod_apply (m1, m2) ->
-        apply ~loc ~attrs (sub.module_expr sub m1) (sub.module_expr sub m2)
-    | Pmod_apply_unit m1 ->
-        apply_unit ~loc ~attrs (sub.module_expr sub m1)
+    | Pmod_apply (kind, m1, m2) ->
+        apply ~loc ~attrs kind
+          (sub.module_expr sub m1) (sub.module_expr sub m2)
+    | Pmod_apply_unit (kind, m1) ->
+        apply_unit ~loc ~attrs kind (sub.module_expr sub m1)
     | Pmod_constraint (m, mty) ->
         constraint_ ~loc ~attrs (sub.module_expr sub m)
                     (sub.module_type sub mty)
@@ -424,7 +426,8 @@ module M = struct
     | Pstr_eval (x, attrs) ->
         let attrs = sub.attributes sub attrs in
         eval ~loc ~attrs (sub.expr sub x)
-    | Pstr_value (r, vbs) -> value ~loc r (List.map (sub.value_binding sub) vbs)
+    | Pstr_value (r, mac, vbs) ->
+        value ~loc r mac (List.map (sub.value_binding sub) vbs)
     | Pstr_primitive vd -> primitive ~loc (sub.value_description sub vd)
     | Pstr_type (rf, l) -> type_ ~loc rf (List.map (sub.type_declaration sub) l)
     | Pstr_typext te -> type_extension ~loc (sub.type_extension sub te)
@@ -549,6 +552,8 @@ module E = struct
           (List.map (sub.binding_op sub) ands) (sub.expr sub body)
     | Pexp_extension x -> extension ~loc ~attrs (sub.extension sub x)
     | Pexp_unreachable -> unreachable ~loc ~attrs ()
+    | Pexp_quote e -> quote ~loc ~attrs (sub.expr sub e)
+    | Pexp_splice e -> splice ~loc ~attrs (sub.expr sub e)
     | Pexp_struct_item (si, e) ->
         struct_item ~loc ~attrs (sub.structure_item sub si) (sub.expr sub e)
     (* Added *)
@@ -712,9 +717,10 @@ let default_mapper =
     extension_constructor = T.map_extension_constructor;
     package_type = T.map_package_type;
     value_description =
-      (fun this {pval_name; pval_type; pval_prim; pval_loc;
+      (fun this {pval_name; pval_type; pval_prim; pval_macro; pval_loc;
                  pval_attributes} ->
         Val.mk
+          pval_macro
           (map_loc map_string this pval_name)
           (this.typ this pval_type)
           ~attrs:(this.attributes this pval_attributes)

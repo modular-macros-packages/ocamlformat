@@ -3928,6 +3928,222 @@
  (deps .ocamlformat)
  (package ocamlformat)
  (action
+  (with-stdout-to macocaml_mixed.ml.stdout
+   (with-stderr-to macocaml_mixed.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_mixed.ml --margin-check %{dep:../tests/macocaml_mixed.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_mixed.ml.ref macocaml_mixed.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_mixed.ml.err macocaml_mixed.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_quote_splice.ml.stdout
+   (with-stderr-to macocaml_quote_splice.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_quote_splice.ml --margin-check %{dep:../tests/macocaml_quote_splice.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_quote_splice.ml.ref macocaml_quote_splice.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_quote_splice.ml.err macocaml_quote_splice.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_splice_keyword.ml.stdout
+   (with-stderr-to macocaml_splice_keyword.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_splice_keyword.ml --margin-check %{dep:../tests/macocaml_splice_keyword.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_splice_keyword.ml.ref macocaml_splice_keyword.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_splice_keyword.ml.err macocaml_splice_keyword.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_splice_utf8.ml.stdout
+   (with-stderr-to macocaml_splice_utf8.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_splice_utf8.ml --margin-check %{dep:../tests/macocaml_splice_utf8.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_splice_utf8.ml.ref macocaml_splice_utf8.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_splice_utf8.ml.err macocaml_splice_utf8.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_static_bindings.ml.stdout
+   (with-stderr-to macocaml_static_bindings.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_static_bindings.ml --margin-check %{dep:../tests/macocaml_static_bindings.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_bindings.ml.ref macocaml_static_bindings.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_bindings.ml.err macocaml_static_bindings.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_static_bindings.mli.stdout
+   (with-stderr-to macocaml_static_bindings.mli.stderr
+     (run %{bin:ocamlformat} --name macocaml_static_bindings.mli --margin-check %{dep:../tests/macocaml_static_bindings.mli})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_bindings.mli.ref macocaml_static_bindings.mli.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_bindings.mli.err macocaml_static_bindings.mli.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_static_constructors.ml.stdout
+   (with-stderr-to macocaml_static_constructors.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_static_constructors.ml --margin-check %{dep:../tests/macocaml_static_constructors.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_constructors.ml.ref macocaml_static_constructors.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_constructors.ml.err macocaml_static_constructors.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_static_constructors.mli.stdout
+   (with-stderr-to macocaml_static_constructors.mli.stderr
+     (run %{bin:ocamlformat} --name macocaml_static_constructors.mli --margin-check %{dep:../tests/macocaml_static_constructors.mli})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_constructors.mli.ref macocaml_static_constructors.mli.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_static_constructors.mli.err macocaml_static_constructors.mli.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_template_functors.ml.stdout
+   (with-stderr-to macocaml_template_functors.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_template_functors.ml --margin-check %{dep:../tests/macocaml_template_functors.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_functors.ml.ref macocaml_template_functors.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_functors.ml.err macocaml_template_functors.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_template_functors.mli.stdout
+   (with-stderr-to macocaml_template_functors.mli.stderr
+     (run %{bin:ocamlformat} --name macocaml_template_functors.mli --margin-check %{dep:../tests/macocaml_template_functors.mli})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_functors.mli.ref macocaml_template_functors.mli.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_functors.mli.err macocaml_template_functors.mli.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_template_paths.ml.stdout
+   (with-stderr-to macocaml_template_paths.ml.stderr
+     (run %{bin:ocamlformat} --name macocaml_template_paths.ml --margin-check %{dep:../tests/macocaml_template_paths.ml})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_paths.ml.ref macocaml_template_paths.ml.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_paths.ml.err macocaml_template_paths.ml.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
+  (with-stdout-to macocaml_template_paths.mli.stdout
+   (with-stderr-to macocaml_template_paths.mli.stderr
+     (run %{bin:ocamlformat} --name macocaml_template_paths.mli --margin-check %{dep:../tests/macocaml_template_paths.mli})))))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_paths.mli.ref macocaml_template_paths.mli.stdout)))
+
+(rule
+ (alias runtest)
+ (package ocamlformat)
+ (action (diff macocaml_template_paths.mli.err macocaml_template_paths.mli.stderr)))
+
+(rule
+ (deps .ocamlformat)
+ (package ocamlformat)
+ (action
   (with-stdout-to margin_80.ml.stdout
    (with-stderr-to margin_80.ml.stderr
      (run %{bin:ocamlformat} --name margin_80.ml --margin-check --margin=80 %{dep:../tests/margin_80.ml})))))

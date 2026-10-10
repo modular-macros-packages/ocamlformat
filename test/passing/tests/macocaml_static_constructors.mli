@@ -1,0 +1,45 @@
+(** MacoCaml compile-time extension constructors in a signature. *)
+
+exception $E of int
+
+exception Runtime of int
+(** An ordinary exception, for contrast. *)
+
+exception $Plain
+
+type t = ..
+
+type t += $A
+
+type t += B | $C of int * string
+
+type t += $G : int -> t
+
+type t += $X : 'a. 'a list -> t
+
+type t += $Rec of { field : int }
+
+exception [@a] $Attr [@b] [@@c]
+
+exception%ext $Ext of int
+
+(** A documented compile-time exception. *)
+exception $Doc of string
+
+type t +=
+  | $Da  (** first *)
+  | (* before *) $Db (* after *) of int  (** second *)
+
+val raise_e : int -> 'a
+
+module type S = sig
+  exception $Inner
+
+  type t += $Ext of t
+end
+
+module N : sig
+  exception $Nested of string * int
+
+  type t += $Long_constructor_name_one of int * string * float * bool * char
+end

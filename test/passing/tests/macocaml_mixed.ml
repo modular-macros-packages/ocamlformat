@@ -1,0 +1,138 @@
+(* Realistic MacoCaml code: staged bindings, quotations, splices and
+   template functors together. *)
+
+module type Numeric = sig
+  type t
+
+  val zero : t
+
+  val add : t -> t -> t
+
+  $val width : int
+
+  $val[..] lift : t -> t expr
+end
+
+(* A macro whose body both quotes and splices. *)
+
+$let[..] rec power base n =
+  if n = 0 then << 1 >>
+  else if n mod 2 = 0 then << let half = $(power base (n / 2)) in half * half >>
+  else << $base * $(power base (n - 1)) >>
+
+$let[..] sum_of_first n =
+  let rec go i acc = if i > n then acc else go (i + 1) << $acc + $(Expr.int i) >> in
+  go 1 << 0 >>
+
+(* Statics feeding macros. *)
+
+$let table_size = 16
+
+$let table = Array.init table_size (fun i -> i * i)
+
+$let[..] lookup i = << $(Expr.int table.(i)) >>
+
+(* A template functor whose body has statics, macros and splices, and
+   whose parameter's members are spliced. *)
+
+module Make $(N : Numeric) = struct
+  type t = N.t
+
+  $let scale = N.width * 2
+
+  $let[..] scaled x = << $(N.lift x) + $(Expr.int scale) >>
+
+  let zero = N.zero
+
+  let unrolled = $(power << 3 >> 5)
+
+  let from_table = $(lookup 7)
+
+  module Inner $(M : Numeric) = struct
+    $let[..] combine a b = << N.add $(N.lift a) $(M.lift b) >>
+  end
+end
+
+(* Instantiation, then splices of the instance's members. *)
+
+module Ints = struct
+  type t = int
+
+  let zero = 0
+
+  let add = ( + )
+
+  $let width = 32
+
+  $let[..] lift x = Expr.int x
+end
+
+module I = Make $(Ints)
+module II = I.Inner $(Ints)
+module Anonymous = Make $(struct
+  type t = int
+
+  let zero = 0
+
+  let add = ( + )
+
+  $let width = 8
+
+  $let[..] lift x = Expr.int x
+end)
+
+let a = $(I.scaled 3)
+
+let b = $(II.combine 1 2)
+
+let c = ! $(I.scaled 1)
+
+let d = - $(I.scaled 2)
+
+(* [$] as an infix operator, next to splices. *)
+
+let e = f $ $(I.scaled 4) $ $(I.scaled 5)
+
+let f = List.map (( $ ) g) [ $(lookup 1); $(lookup 2) ]
+
+(* Extensions and attributes on staged bindings. *)
+
+$let%ext [@attr] instrumented = ref 0
+
+$let[..]%ext [@attr] traced x = << incr counter; $x >> [@@doc "traced macro"]
+
+(* Comments in every awkward place. *)
+
+$let[..] commented (* after the name *) x =
+  << (* inside the quotation *) $( (* before the expression *) x) >>
+
+$let[..] commented_after x = << $(x (* after the expression *)) >>
+
+module Commented_functor $((* the parameter *) P : Numeric) = struct
+  let v = $(P.lift P.zero)
+end
+
+(* Lines long enough to force breaks inside a quotation and in a template
+   parameter list. *)
+
+$let[..] long_quotation environment =
+  <<
+    let looked_up = $(lookup 3) and computed = $(power << 2 >> 8) in
+    List.fold_left ( + ) 0 [ looked_up; computed; $(Expr.int table_size) ]
+  >>
+
+module Many
+    $(Alpha : Numeric)
+    $(Beta : Numeric)
+    $(Gamma : Numeric)
+    (Delta : Numeric) = struct
+  $let[..] widths () =
+    <<
+      [ $(Expr.int Alpha.width)
+      ; $(Expr.int Beta.width)
+      ; $(Expr.int Gamma.width)
+      ; $(Expr.int Delta.width) ]
+    >>
+end
+
+let () = Printf.printf "%d %d %d\n" a b $(I.scaled 6)
